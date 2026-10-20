@@ -1088,16 +1088,16 @@ Cada tarefa deve:
 
 ## Sprint 2 — Docker local
 
-- [ ] Criar Dockerfile.
-- [ ] Criar Compose local.
-- [ ] Configurar serviço Django.
-- [ ] Configurar PostgreSQL.
-- [ ] Configurar Redis.
-- [ ] Configurar RabbitMQ.
-- [ ] Configurar volumes.
-- [ ] Configurar healthchecks locais.
-- [ ] Validar subida completa.
-- [ ] Documentar comandos de desenvolvimento.
+- [x] Criar Dockerfile.
+- [x] Criar Compose local.
+- [x] Configurar serviço Django.
+- [x] Configurar PostgreSQL.
+- [x] Configurar Redis.
+- [x] Configurar RabbitMQ.
+- [x] Configurar volumes.
+- [x] Configurar healthchecks locais.
+- [x] Validar subida completa.
+- [x] Documentar comandos de desenvolvimento.
 
 ## Sprint 3 — Autenticação e permissões
 

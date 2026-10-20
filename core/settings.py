@@ -92,6 +92,11 @@ DATABASES = {
     ),
 }
 
+# Fail fast instead of hanging forever when PostgreSQL is unreachable
+# (e.g. Docker Desktop/Windows IPv6 loopback proxy issues on localhost).
+if DATABASES['default']['ENGINE'].endswith('postgresql'):
+    DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 5
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators

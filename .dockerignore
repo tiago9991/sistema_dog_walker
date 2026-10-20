@@ -1,0 +1,30 @@
+# VCS
+.git
+.gitignore
+
+# Local environments — never bake into the image
+.venv
+.env
+.claude
+
+# Django artifacts
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+site/
+
+# Docs and visual reference are not needed inside the image
+docs/
+design_system/
+README.md
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+compose.yml
+stack.yml
+
+# Python caches
+__pycache__/
+*.py[cod]

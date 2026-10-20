@@ -1,0 +1,107 @@
+# Compose de desenvolvimento local (PRD seções 7, 11, 12, 16 e 17).
+# A stack de produção (Swarm + Traefik + redes overlay) é a Sprint 17;
+# redes overlay do PRD 11.2 não se aplicam ao Compose local.
+
+name: scsi
+
+services:
+  django:
+    build: .
+    env_file: .env
+    environment:
+      # Dentro da rede do Compose o host do banco é o nome do serviço.
+      # Sobrescreve o DATABASE_URL do .env (que aponta para localhost).
+      DATABASE_URL: postgres://scsi:scsi@postgres:5432/scsi
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Código montado para auto-reload do runserver.
+      - .:/app
+      - scsi_media:/app/media
+      - scsi_staticfiles:/app/staticfiles
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      # PRD 16: /health/ — HTTP 200, sem auth, sem banco.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Margem para entrypoint (migrations + collectstatic) antes de servir.
+      start_period: 60s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: scsi
+      POSTGRES_PASSWORD: scsi
+      POSTGRES_DB: scsi
+    ports:
+      # Exposto apenas em loopback para desenvolvimento no host.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Mesmo volume criado na Sprint 1 (dados preservados e adotados
+      # pelo Compose através do nome explícito).
+      - scsi_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      # PRD 16: pg_isready
+      test: ["CMD-SHELL", "pg_isready -U scsi -d scsi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    volumes:
+      - scsi_redis_data:/data
+    healthcheck:
+      # PRD 16: redis-cli ping
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: scsi
+      RABBITMQ_DEFAULT_PASS: scsi
+    volumes:
+      - scsi_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      # PRD 16: rabbitmq-diagnostics check_port_connectivity
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # PRD 16: start_period generoso para evitar falsos negativos.
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  # Banco criado na Sprint 1: externo ao ciclo de vida do Compose para que
+  # `docker compose down -v` NUNCA o remova (reset deliberado:
+  #   docker compose down; docker volume rm scsi_pg_data;
+  #   docker volume create scsi_pg_data; docker compose up -d)
+  # Primeira execução em máquina nova:
+  #   docker volume create scsi_pg_data
+  scsi_pg_data:
+    external: true
+    name: scsi_pg_data
+  # Nomes explícitos para evitar o prefixo do projeto (`scsi_`) duplo.
+  scsi_redis_data:
+    name: scsi_redis_data
+  scsi_rabbitmq_data:
+    name: scsi_rabbitmq_data
+  scsi_media:
+    name: scsi_media
+  scsi_staticfiles:
+    name: scsi_staticfiles
