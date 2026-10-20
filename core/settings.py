@@ -79,11 +79,16 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
-# SQLite is the local default; set DATABASE_URL (e.g. postgres://...) to override.
+# DATABASE_URL is read from the process environment first (production
+# containers) and then from .env (local). Falls back to local SQLite only
+# when it is empty, for quick runs without a PostgreSQL instance.
+DATABASE_URL = config('DATABASE_URL', default='')
+
 DATABASES = {
-    'default': dj_database_url.config(
-        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+    'default': dj_database_url.parse(
+        DATABASE_URL or f'sqlite:///{BASE_DIR / "db.sqlite3"}',
         conn_max_age=60,
+        conn_health_checks=True,
     ),
 }
 

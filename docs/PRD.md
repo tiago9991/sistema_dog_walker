@@ -1076,15 +1076,15 @@ Cada tarefa deve:
 
 ## Sprint 1 — Django + PostgreSQL
 
-- [ ] Configurar PostgreSQL local.
-- [ ] Configurar conexão via `.env`.
-- [ ] Criar configuração de banco.
-- [ ] Criar modelo base com timestamps.
-- [ ] Criar estratégia de migrations.
-- [ ] Executar primeira migration.
-- [ ] Validar conexão.
-- [ ] Configurar Django Admin.
-- [ ] Documentar banco.
+- [x] Configurar PostgreSQL local.
+- [x] Configurar conexão via `.env`.
+- [x] Criar configuração de banco.
+- [x] Criar modelo base com timestamps.
+- [x] Criar estratégia de migrations.
+- [x] Executar primeira migration.
+- [x] Validar conexão.
+- [x] Configurar Django Admin.
+- [x] Documentar banco.
 
 ## Sprint 2 — Docker local
 
