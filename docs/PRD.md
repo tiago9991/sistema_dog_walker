@@ -136,12 +136,13 @@ Autenticação:
   e redireciona para `/login/?next=...`;
 - `/health/` permanece público (seção 16).
 
-Grupos (criados pela migration `base.0001_groups`):
+Grupos (criados pela migration `base.0001_groups` e estendidos pela
+`base.0002_walks_permissions`):
 
 | Grupo | Permissões |
 |---|---|
-| `Operação` | `view`/`add`/`change` de `Client` e `Dog` |
-| `Leitura` | `view` de `Client` e `Dog` |
+| `Operação` | `view`/`add`/`change` de `Client`, `Dog`, `WalkSchedule` e `Walk` |
+| `Leitura` | `view` de `Client`, `Dog`, `WalkSchedule` e `Walk` |
 
 Mapeamento de ações:
 
@@ -252,6 +253,21 @@ O modelo definitivo de recorrência deve ser definido durante a implementação 
 
 Não assumir regras de cobrança ou prorrateamento que ainda não foram especificadas.
 
+### Regras de recorrência implementadas (Sprint 6)
+
+- Recorrência **semanal por dias da semana**: a programação seleciona os dias
+  (segunda a domingo) em que o passeio ocorre; a frequência vigente é
+  `semanal` (campo `frequency`, extensível a modelos futuros).
+- Período aplicável: **início obrigatório** e **fim opcional** (vazio =
+  aberto); o fim nunca pode ser anterior ao início.
+- Status da programação: `ativa`/`desativada` (desativação soft, com
+  `deactivated_at` — histórico preservado).
+- Validações (model `clean`, válidas no app e no Admin): ao menos um dia da
+  semana; período válido; duas programações ativas do mesmo cachorro não
+  podem gerar passeios para o mesmo dia (bloqueio quando há dias da semana
+  em comum com períodos sobrepostos).
+- Programações não podem ser criadas para cachorro ou cliente desativado.
+
 ---
 
 ## RF-005 — Geração de passeios
@@ -269,6 +285,28 @@ Deve evitar duplicação de passeios.
 - considerar alterações na programação;
 - utilizar constraints/validações para evitar duplicidade quando aplicável;
 - permitir execução segura em background quando o volume justificar.
+
+### Regras de geração implementadas (Sprint 7)
+
+- Algoritmo determinístico: para cada programação ativa (de cachorro e
+  cliente ativos), percorre as datas da janela e cria o passeio quando o dia
+  da semana coincide — no máximo **um passeio por cachorro por data**
+  (`UniqueConstraint(dog, date)`).
+- Janela de geração: **[hoje − 7 dias, hoje + 30 dias]** (padrão,
+  configurável por execução via `--lookback`/`--horizon`); o retrospecto
+  cobre execuções que não ocorreram sem criar passeios anteriores ao início
+  da programação.
+- Idempotência: criação via `get_or_create` + constraint; re-execuções não
+  duplicam nem sobrescrevem passeios existentes (status preservado).
+- Alterações de programação (criar/editar/ativar/desativar) fazem o
+  **resync** do cachorro: apagam os futuros `previsto` e os regeneram pelas
+  programações ativas; passeios com qualquer outro status nunca são apagados
+  (histórico preservado).
+- Timezone: datas operacionais obtidas com `timezone.localdate()`
+  (`America/Sao_Paulo`); o passeio armazena `date` (sem horário).
+- Execução: management command `generate_walks` (idempotente, com
+  relatório). Task Celery não é necessária antes da Sprint 11 (o broker
+  ainda não existe e o volume não justifica).
 
 ---
 
@@ -290,6 +328,21 @@ Estados mínimos previstos:
 - não realizado.
 
 A máquina de estados definitiva deve ser documentada antes da implementação final.
+
+### Máquina de estados implementada (Sprint 8)
+
+| De | Para | Ação |
+|---|---|---|
+| `previsto` | `realizado` | confirmar passeio (RF-007) |
+| `previsto` | `cancelado` | cancelar, com observação/motivo opcional (RF-008) |
+| `previsto` | `não realizado` | registrar não realização, com observação/motivo opcional (RF-008) |
+| `realizado` / `cancelado` / `não realizado` | `previsto` | reverter (correção de erro) |
+
+Transições fora desta máquina são rejeitadas no backend (manipulação de
+URL/request não bypassa). Toda transição registra `status_changed_at`;
+observações são anexadas ao histórico do passeio com carimbo de data/hora.
+Regras de impacto financeiro e de remarcação permanecem decisões abertas
+(seção 53).
 
 ---
 
@@ -622,17 +675,39 @@ Representa a programação recorrente.
 
 Deve possuir vínculo com cachorro e informações necessárias para gerar passeios.
 
+Campos definitivos (definidos na Sprint 6 — decisão 8 da seção 53 resolvida):
+
+| Campo | Tipo | Observação |
+|---|---|---|
+| `dog` | `ForeignKey(Dog, PROTECT)` | `related_name="schedules"` |
+| `frequency` | `CharField(20)` com choices | `semanal` (extensível) |
+| `monday`..`sunday` | 7 `BooleanField` | dias da semana da recorrência |
+| `start_date` | `DateField` | início do período (obrigatório) |
+| `end_date` | `DateField` opcional | vazio = período aberto |
+| `is_active` | `BooleanField` | desativação soft |
+| `deactivated_at` | `DateTimeField` | preenchida na desativação |
+
+Campos técnicos: `created_at`/`updated_at` (herdados de `BaseModel`).
+Validações e regras de recorrência: ver RF-004.
+
 ### Walk
 
 Representa um passeio previsto/realizado/cancelado.
 
-Deve possuir:
+Campos definitivos (definidos na Sprint 7 — decisões 3 e 4 da seção 53
+resolvidas): **um passeio por cachorro por data**
+(`UniqueConstraint(dog, date)`), sem componente de horário.
 
-- cachorro;
-- data/hora ou data operacional conforme regra aprovada;
-- status;
-- observação;
-- timestamps.
+| Campo | Tipo | Observação |
+|---|---|---|
+| `dog` | `ForeignKey(Dog, PROTECT)` | `related_name="walks"` |
+| `date` | `DateField` | data operacional (`America/Sao_Paulo`) |
+| `status` | `CharField(20)` com choices | previsto/realizado/cancelado/não realizado |
+| `notes` | `TextField` | observações; transições anexam entradas com data/hora |
+| `status_changed_at` | `DateTimeField` | última transição de status |
+
+Campos técnicos: `created_at`/`updated_at` (herdados de `BaseModel`).
+Máquina de estados e regras de geração: ver RF-005/RF-006.
 
 ### Notification
 
@@ -1191,45 +1266,45 @@ Cada tarefa deve:
 
 ## Sprint 6 — Programação
 
-- [ ] Definir modelo definitivo de programação.
-- [ ] Definir frequência.
-- [ ] Definir dias da semana.
-- [ ] Definir período de validade.
-- [ ] Criar model de programação.
-- [ ] Criar migration.
-- [ ] Criar CRUD.
-- [ ] Criar validações.
-- [ ] Documentar regras de recorrência.
+- [x] Definir modelo definitivo de programação.
+- [x] Definir frequência.
+- [x] Definir dias da semana.
+- [x] Definir período de validade.
+- [x] Criar model de programação.
+- [x] Criar migration.
+- [x] Criar CRUD.
+- [x] Criar validações.
+- [x] Documentar regras de recorrência.
 
 ## Sprint 7 — Geração de passeios
 
-- [ ] Definir algoritmo de geração.
-- [ ] Definir janela de geração.
-- [ ] Definir comportamento em alterações de programação.
-- [ ] Criar model Walk.
-- [ ] Criar statuses.
-- [ ] Criar constraints contra duplicidade.
-- [ ] Implementar geração.
-- [ ] Validar timezone.
-- [ ] Criar command de geração.
-- [ ] Criar task Celery quando necessário.
-- [ ] Validar idempotência.
+- [x] Definir algoritmo de geração.
+- [x] Definir janela de geração.
+- [x] Definir comportamento em alterações de programação.
+- [x] Criar model Walk.
+- [x] Criar statuses.
+- [x] Criar constraints contra duplicidade.
+- [x] Implementar geração.
+- [x] Validar timezone.
+- [x] Criar command de geração.
+- [x] Criar task Celery quando necessário.
+- [x] Validar idempotência.
 
 ## Sprint 8 — Operação dos passeios
 
-- [ ] Criar listagem diária.
-- [ ] Criar visão semanal.
-- [ ] Criar visão mensal.
-- [ ] Criar filtro por cliente.
-- [ ] Criar filtro por cachorro.
-- [ ] Criar filtro por data.
-- [ ] Criar filtro por mês.
-- [ ] Criar filtro por status.
-- [ ] Criar ação realizado.
-- [ ] Criar ação cancelado.
-- [ ] Criar ação não realizado.
-- [ ] Criar observações.
-- [ ] Criar histórico.
+- [x] Criar listagem diária.
+- [x] Criar visão semanal.
+- [x] Criar visão mensal.
+- [x] Criar filtro por cliente.
+- [x] Criar filtro por cachorro.
+- [x] Criar filtro por data.
+- [x] Criar filtro por mês.
+- [x] Criar filtro por status.
+- [x] Criar ação realizado.
+- [x] Criar ação cancelado.
+- [x] Criar ação não realizado.
+- [x] Criar observações.
+- [x] Criar histórico.
 
 ## Sprint 9 — Controle mensal
 
@@ -2455,14 +2530,14 @@ Os pontos abaixo devem ser decididos antes da implementação definitiva do dom�
 
 - [x] Campos completos de `Client`.
 - [x] Campos completos de `Dog`.
-- [ ] Campos completos de `Walk`.
-- [ ] Estados definitivos de `Walk`.
+- [x] Campos completos de `Walk`.
+- [x] Estados definitivos de `Walk`.
 - [ ] Regras de cancelamento.
 - [ ] Regras financeiras de cancelamento.
 - [ ] Regra exata para "passeios restantes".
-- [ ] Modelo definitivo de recorrência.
-- [ ] Janela de geração de passeios.
-- [ ] Comportamento quando uma programação é alterada.
+- [x] Modelo definitivo de recorrência.
+- [x] Janela de geração de passeios.
+- [x] Comportamento quando uma programação é alterada.
 - [ ] Regras de feriados.
 - [ ] Regras de remarcação.
 - [ ] Modelo de notificações.

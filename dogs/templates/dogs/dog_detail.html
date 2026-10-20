@@ -76,32 +76,138 @@
                         {% endif %}
                     </div>
                 </div>
+                <div class="mb-3">
+                    <div class="fs-12 text-muted mb-1">Cadastrado em</div>
+                    <div class="fw-semibold text-dark">{{ dog.created_at|date:'d/m/Y H:i' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="fs-12 text-muted mb-1">Atualizado em</div>
+                    <div class="fw-semibold text-dark">{{ dog.updated_at|date:'d/m/Y H:i' }}</div>
+                </div>
+                {% if not dog.is_active and dog.deactivated_at %}
+                <div class="mb-3">
+                    <div class="fs-12 text-muted mb-1">Desativado em</div>
+                    <div class="fw-semibold text-dark">{{ dog.deactivated_at|date:'d/m/Y H:i' }}</div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
     <div class="col-xxl-8 col-md-12">
-        <div class="card stretch stretch-full">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Histórico</h5>
+        {% if perms.scheduling.view_schedule %}
+        <div class="card stretch stretch-full mb-4">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Programações</h5>
+                {% if perms.scheduling.add_schedule and dog.is_active and client.is_active %}
+                <div class="card-header-action ms-auto">
+                    <a href="{% url 'scheduling:create' dog.client.pk dog.pk %}" class="btn btn-primary btn-sm">
+                        <i class="feather-plus me-2"></i><span>Nova programação</span>
+                    </a>
+                </div>
+                {% endif %}
             </div>
-            <div class="card-body">
-                <div class="p-3 border border-dashed rounded mb-3">
-                    <div class="fs-12 text-muted mb-1">Cadastrado em</div>
-                    <div class="fw-semibold text-dark">{{ dog.created_at|date:'d/m/Y H:i' }}</div>
+            <div class="card-body custom-card-action p-0">
+                {% if schedules %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="border-b">
+                                <th>Dias da semana</th>
+                                <th>Período</th>
+                                <th>Frequência</th>
+                                <th>Situação</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for schedule in schedules %}
+                            <tr>
+                                <td>{{ schedule.weekday_summary }}</td>
+                                <td class="fs-12">{{ schedule.start_date|date:'d/m/Y' }} – {% if schedule.end_date %}{{ schedule.end_date|date:'d/m/Y' }}{% else %}<span class="text-muted">indefinido</span>{% endif %}</td>
+                                <td class="fs-12">{{ schedule.get_frequency_display }}</td>
+                                <td>
+                                    {% if schedule.is_active %}
+                                    <span class="badge bg-soft-success text-success">Ativa</span>
+                                    {% else %}
+                                    <span class="badge bg-soft-danger text-danger">Desativada</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex align-items-center justify-content-end gap-3">
+                                        {% if perms.scheduling.change_schedule %}
+                                        <a href="{% url 'scheduling:update' dog.client.pk dog.pk schedule.pk %}" data-bs-toggle="tooltip" title="Editar"><i class="feather-edit-3"></i></a>
+                                        {% if schedule.is_active %}
+                                        <form method="post" action="{% url 'scheduling:deactivate' dog.client.pk dog.pk schedule.pk %}" class="mb-0" onsubmit="return confirm('Desativar esta programação? Os passeios previstos futuros dela serão removidos.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-link p-0 text-danger" data-bs-toggle="tooltip" title="Desativar"><i class="feather-power"></i></button>
+                                        </form>
+                                        {% else %}
+                                        <form method="post" action="{% url 'scheduling:activate' dog.client.pk dog.pk schedule.pk %}" class="mb-0">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-link p-0 text-success" data-bs-toggle="tooltip" title="Reativar"><i class="feather-check"></i></button>
+                                        </form>
+                                        {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
-                <div class="p-3 border border-dashed rounded mb-3">
-                    <div class="fs-12 text-muted mb-1">Atualizado em</div>
-                    <div class="fw-semibold text-dark">{{ dog.updated_at|date:'d/m/Y H:i' }}</div>
+                {% else %}
+                <div class="text-center p-5">
+                    <i class="feather-calendar fs-1 d-block mb-3"></i>
+                    <p class="text-muted mb-0">Nenhuma programação para este cachorro.</p>
                 </div>
-                <div class="p-3 border border-dashed rounded {% if not dog.is_active %}border-danger{% endif %}">
-                    <div class="fs-12 text-muted mb-1">Desativado em</div>
-                    <div class="fw-semibold text-dark">{% if dog.deactivated_at %}{{ dog.deactivated_at|date:'d/m/Y H:i' }}{% else %}— (cachorro ativo){% endif %}</div>
-                </div>
-                <p class="fs-12 text-muted mt-3 mb-0">
-                    O histórico completo de passeios deste cachorro será exibido nas próximas sprints.
-                </p>
+                {% endif %}
             </div>
         </div>
+        {% endif %}
+
+        {% if perms.walks.view_walk %}
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Histórico de passeios</h5>
+                <div class="card-header-action ms-auto">
+                    <a href="{% url 'walks:history' %}?dog={{ dog.pk }}" class="fs-12 fw-semibold text-primary">
+                        <i class="feather-external-link me-2"></i><span>Ver histórico completo</span>
+                    </a>
+                </div>
+            </div>
+            <div class="card-body custom-card-action p-0">
+                {% if dog_walks %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="border-b">
+                                <th>Data</th>
+                                <th>Status</th>
+                                <th>Status alterado em</th>
+                                <th>Observações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for walk in dog_walks %}
+                            <tr>
+                                <td class="fs-12">{{ walk.date|date:'d/m/Y' }} <span class="text-muted">{{ walk.date|date:'(D)' }}</span></td>
+                                <td>{% include 'walks/_status_badge.html' %}</td>
+                                <td class="fs-12 text-muted">{% if walk.status_changed_at %}{{ walk.status_changed_at|date:'d/m/Y H:i' }}{% else %}—{% endif %}</td>
+                                <td class="fs-12 text-muted"><div class="text-truncate-1-line" style="max-width: 260px;">{% if walk.notes %}{{ walk.notes|linebreaksbr|truncatechars:60 }}{% else %}—{% endif %}</div></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-5">
+                    <i class="feather-external-link fs-1 d-block mb-3"></i>
+                    <p class="text-muted mb-0">Nenhum passeio registrado para este cachorro.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

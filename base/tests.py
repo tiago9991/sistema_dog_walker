@@ -93,13 +93,22 @@ class AuthorizationGroupsTests(TestCase):
                 'view_dog',
                 'add_dog',
                 'change_dog',
+                'view_walkschedule',
+                'add_walkschedule',
+                'change_walkschedule',
+                'view_walk',
+                'add_walk',
+                'change_walk',
             },
         )
 
         leitura_codenames = set(
             leitura.permissions.values_list('codename', flat=True)
         )
-        self.assertEqual(leitura_codenames, {'view_client', 'view_dog'})
+        self.assertEqual(
+            leitura_codenames,
+            {'view_client', 'view_dog', 'view_walkschedule', 'view_walk'},
+        )
 
         # delete_* is never granted: history must be preserved (PRD RF-002/003)
         self.assertNotIn('delete_client', operacao_codenames)

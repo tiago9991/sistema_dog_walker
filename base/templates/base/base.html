@@ -37,6 +37,12 @@
                             <span class="nxl-mtext">Clientes</span>
                         </a>
                     </li>
+                    <li class="nxl-item{% if current_app == 'walks' %} active{% endif %}">
+                        <a href="{% url 'walks:day' %}" class="nxl-link{% if current_app == 'walks' %} active{% endif %}">
+                            <span class="nxl-micon"><i class="feather-calendar"></i></span>
+                            <span class="nxl-mtext">Passeios</span>
+                        </a>
+                    </li>
                     {% endwith %}
                     {% if user.is_staff %}
                     <li class="nxl-item">

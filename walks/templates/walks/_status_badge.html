@@ -1,0 +1,9 @@
+{% if walk.status == 'scheduled' %}
+<span class="badge bg-soft-primary text-primary">Previsto</span>
+{% elif walk.status == 'completed' %}
+<span class="badge bg-soft-success text-success">Realizado</span>
+{% elif walk.status == 'cancelled' %}
+<span class="badge bg-soft-danger text-danger">Cancelado</span>
+{% elif walk.status == 'missed' %}
+<span class="badge bg-soft-warning text-warning">Não realizado</span>
+{% endif %}

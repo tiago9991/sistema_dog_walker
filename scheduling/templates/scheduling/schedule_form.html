@@ -1,0 +1,98 @@
+{% extends 'base/base.html' %}
+
+{% block title %}{% if schedule %}Editar programação{% else %}Nova programação{% endif %} — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}{% if schedule %}Editar programação{% else %}Nova programação{% endif %}{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'clients:list' %}">Clientes</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'clients:detail' client.pk %}">{{ client.name }}</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'dogs:detail' client.pk dog.pk %}">{{ dog.name }}</a></li>
+    <li class="breadcrumb-item">{% if schedule %}Editar programação{% else %}Nova programação{% endif %}</li>
+</ul>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xxl-8 col-md-12">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Dados da programação</h5>
+                    <div class="card-header-action ms-auto">
+                        <a href="{% url 'dogs:detail' client.pk dog.pk %}" class="fs-12 fw-semibold text-primary">
+                            <i class="feather-users me-2"></i><span>{{ dog.name }}</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+                            <i class="feather-alert-circle"></i>
+                            <span class="fs-12">{% for error in form.non_field_errors %}{{ error }}{% if not forloop.last %} {% endif %}{% endfor %}</span>
+                        </div>
+                    {% endif %}
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ form.frequency.id_for_label }}">Frequência</label>
+                            {{ form.frequency }}
+                            {% for error in form.frequency.errors %}<div class="fs-11 text-danger mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ form.start_date.id_for_label }}">Início do período</label>
+                            {{ form.start_date }}
+                            {% for error in form.start_date.errors %}<div class="fs-11 text-danger mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="{{ form.end_date.id_for_label }}">Fim do período (opcional)</label>
+                            {{ form.end_date }}
+                            {% for error in form.end_date.errors %}<div class="fs-11 text-danger mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label d-block">Dias da semana</label>
+                            <div class="d-flex flex-wrap gap-4">
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="{{ form.monday.id_for_label }}" name="monday" {% if form.monday.value %}checked{% endif %}>
+                                    <label class="custom-control-label c-pointer" for="{{ form.monday.id_for_label }}">Segunda</label>
+                                </div>
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="{{ form.tuesday.id_for_label }}" name="tuesday" {% if form.tuesday.value %}checked{% endif %}>
+                                    <label class="custom-control-label c-pointer" for="{{ form.tuesday.id_for_label }}">Terça</label>
+                                </div>
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="{{ form.wednesday.id_for_label }}" name="wednesday" {% if form.wednesday.value %}checked{% endif %}>
+                                    <label class="custom-control-label c-pointer" for="{{ form.wednesday.id_for_label }}">Quarta</label>
+                                </div>
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="{{ form.thursday.id_for_label }}" name="thursday" {% if form.thursday.value %}checked{% endif %}>
+                                    <label class="custom-control-label c-pointer" for="{{ form.thursday.id_for_label }}">Quinta</label>
+                                </div>
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="{{ form.friday.id_for_label }}" name="friday" {% if form.friday.value %}checked{% endif %}>
+                                    <label class="custom-control-label c-pointer" for="{{ form.friday.id_for_label }}">Sexta</label>
+                                </div>
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="{{ form.saturday.id_for_label }}" name="saturday" {% if form.saturday.value %}checked{% endif %}>
+                                    <label class="custom-control-label c-pointer" for="{{ form.saturday.id_for_label }}">Sábado</label>
+                                </div>
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="{{ form.sunday.id_for_label }}" name="sunday" {% if form.sunday.value %}checked{% endif %}>
+                                    <label class="custom-control-label c-pointer" for="{{ form.sunday.id_for_label }}">Domingo</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer d-flex align-items-center gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="feather-check me-2"></i><span>Salvar</span>
+                    </button>
+                    <a href="{% url 'dogs:detail' client.pk dog.pk %}" class="btn btn-light-brand">Cancelar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

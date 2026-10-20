@@ -73,6 +73,12 @@ class DogDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['client'] = self.object.client
+        # Schedules (Sprint 6) and recent walk history (Sprint 8).
+        context['schedules'] = self.object.schedules.all()
+        context['dog_walks'] = (
+            self.object.walks.select_related('dog', 'dog__client')
+            .order_by('-date', '-dog__name')[:10]
+        )
         return context
 
 

@@ -10,4 +10,10 @@ urlpatterns = [
     # Dog routes stay under their client's URL scope (RF-003), included at
     # the root so the ``dogs`` namespace is directly reversible.
     path('clients/<int:client_pk>/dogs/', include('dogs.urls')),
+    # Schedules stay under their dog's URL scope (RF-004), same pattern.
+    path(
+        'clients/<int:client_pk>/dogs/<int:dog_pk>/schedules/',
+        include('scheduling.urls'),
+    ),
+    path('walks/', include('walks.urls')),
 ]

@@ -1,0 +1,60 @@
+{% extends 'base/base.html' %}
+
+{% block title %}{{ title }} — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'walks:day' %}">Passeios</a></li>
+    <li class="breadcrumb-item">{{ title }}</li>
+</ul>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xxl-6 col-md-12">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+            <div class="card stretch stretch-full">
+                <div class="card-header d-flex align-items-center">
+                    <h5 class="card-title mb-0">{{ walk.dog.name }}</h5>
+                    <div class="card-header-action ms-auto">
+                        {% include 'walks/_status_badge.html' %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="fs-12 text-muted mb-1">Cliente</div>
+                        <div class="fw-semibold text-dark">
+                            <a href="{% url 'clients:detail' walk.dog.client.pk %}" class="text-primary">{{ walk.dog.client.name }}</a>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="fs-12 text-muted mb-1">Data</div>
+                        <div class="fw-semibold text-dark">{{ walk.date|date:'l, d/m/Y' }}</div>
+                    </div>
+                    {% if walk.notes %}
+                    <div class="mb-3">
+                        <div class="fs-12 text-muted mb-1">Observações registradas</div>
+                        <div class="fw-semibold text-dark" style="white-space: pre-line;">{{ walk.notes }}</div>
+                    </div>
+                    {% endif %}
+                    <div class="mb-0">
+                        <label class="form-label" for="id_observation">Observação / motivo (opcional)</label>
+                        <textarea name="observation" rows="3" class="form-control" id="id_observation" placeholder="Ex.: cliente pediu para remarcar; cachorro doente..."></textarea>
+                        <div class="fs-11 text-muted mt-1">A observação é registrada no histórico do passeio com data e hora.</div>
+                    </div>
+                </div>
+                <div class="card-footer d-flex align-items-center gap-2">
+                    <button type="submit" class="btn {{ confirm_class }}">
+                        <i class="{% if action == 'cancel' %}feather-x{% else %}feather-alert-circle{% endif %} me-2"></i><span>{{ confirm_label }}</span>
+                    </button>
+                    <a href="{{ next|default:'/walks/dia/' }}" class="btn btn-light-brand">Voltar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Passeios — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}Passeios{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'walks:index' %}">Passeios</a></li>
+    <li class="breadcrumb-item">
+        {% if mode == 'day' %}Dia{% elif mode == 'week' %}Semana{% elif mode == 'month' %}Mês{% else %}Histórico{% endif %}
+    </li>
+</ul>
+{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group" role="group" aria-label="Visões">
+    <a href="{% url 'walks:day' %}" class="btn btn-sm {% if mode == 'day' %}btn-primary{% else %}btn-light-brand{% endif %}">Dia</a>
+    <a href="{% url 'walks:week' %}" class="btn btn-sm {% if mode == 'week' %}btn-primary{% else %}btn-light-brand{% endif %}">Semana</a>
+    <a href="{% url 'walks:month' %}" class="btn btn-sm {% if mode == 'month' %}btn-primary{% else %}btn-light-brand{% endif %}">Mês</a>
+    <a href="{% url 'walks:history' %}" class="btn btn-sm {% if mode == 'history' %}btn-primary{% else %}btn-light-brand{% endif %}">Histórico</a>
+</div>
+<form method="get" action="{{ mode_url }}" class="d-flex align-items-center gap-2 flex-wrap" role="search">
+    {% if mode == 'day' or mode == 'week' %}
+        <input type="date" name="date" value="{{ current_date }}" class="form-control form-control-sm" aria-label="Data">
+    {% else %}
+        <input type="month" name="month" value="{{ current_month }}" class="form-control form-control-sm" aria-label="Mês">
+    {% endif %}
+    <select name="client" class="form-select form-select-sm" aria-label="Cliente">
+        <option value="">Cliente: todos</option>
+        {% for client in clients %}
+        <option value="{{ client.pk }}" {% if client.pk == current_client_id %}selected{% endif %}>{{ client.name }}</option>
+        {% endfor %}
+    </select>
+    <select name="dog" class="form-select form-select-sm" aria-label="Cachorro">
+        <option value="">Cachorro: todos</option>
+        {% for dog in dogs %}
+        <option value="{{ dog.pk }}" {% if dog.pk == current_dog_id %}selected{% endif %}>{{ dog.name }} — {{ dog.client.name }}</option>
+        {% endfor %}
+    </select>
+    <select name="status" class="form-select form-select-sm" aria-label="Status">
+        <option value="">Status: todos</option>
+        {% for value, label in status_choices %}
+        <option value="{{ value }}" {% if value == current_status %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sm btn-light-brand">
+        <i class="feather-filter me-2"></i><span>Filtrar</span>
+    </button>
+</form>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">
+                    {% if mode == 'day' %}
+                        {{ period_start|date:'D, d/m/Y' }}
+                    {% elif mode == 'week' %}
+                        Semana de {{ period_start|date:'d/m/Y' }} a {{ period_end|date:'d/m/Y' }}
+                    {% elif mode == 'month' %}
+                        {{ period_start|date:'F Y'|capfirst }}
+                    {% else %}
+                        Histórico de passeios
+                    {% endif %}
+                </h5>
+                {% if nav %}
+                <div class="card-header-action ms-auto d-flex align-items-center gap-2">
+                    <a href="{{ nav.prev }}" class="btn btn-sm btn-light-brand" data-bs-toggle="tooltip" title="Período anterior">
+                        <i class="bi bi-arrow-left"></i>
+                    </a>
+                    <a href="{% if mode == 'day' %}{% url 'walks:day' %}{% elif mode == 'week' %}{% url 'walks:week' %}{% else %}{% url 'walks:month' %}{% endif %}" class="btn btn-sm btn-light-brand" data-bs-toggle="tooltip" title="Hoje/atual">
+                        <i class="feather-calendar"></i>
+                    </a>
+                    <a href="{{ nav.next }}" class="btn btn-sm btn-light-brand" data-bs-toggle="tooltip" title="Próximo período">
+                        <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body custom-card-action p-0">
+                {% if walks %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="border-b">
+                                {% if mode != 'day' %}<th>Data</th>{% endif %}
+                                <th>Cachorro</th>
+                                <th>Status</th>
+                                <th>Status alterado em</th>
+                                <th>Observações</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for walk in walks %}
+                            <tr>
+                                {% if mode != 'day' %}<td class="fs-12">{{ walk.date|date:'d/m/Y' }}{% if mode != 'month' %} <span class="text-muted">{{ walk.date|date:'(D)' }}</span>{% endif %}</td>{% endif %}
+                                <td>
+                                    <a href="{% url 'dogs:detail' walk.dog.client.pk walk.dog.pk %}">
+                                        <span class="d-block">{{ walk.dog.name }}</span>
+                                        <span class="fs-12 d-block fw-normal text-muted">{{ walk.dog.client.name }}</span>
+                                    </a>
+                                </td>
+                                <td>{% include 'walks/_status_badge.html' %}</td>
+                                <td class="fs-12 text-muted">{% if walk.status_changed_at %}{{ walk.status_changed_at|date:'d/m/Y H:i' }}{% else %}—{% endif %}</td>
+                                <td class="fs-12 text-muted"><div class="text-truncate-1-line" style="max-width: 260px;">{% if walk.notes %}{{ walk.notes|linebreaksbr|truncatechars:60 }}{% else %}—{% endif %}</div></td>
+                                <td class="text-end">
+                                    <div class="d-flex align-items-center justify-content-end gap-2">
+                                        {% if perms.walks.change_walk %}
+                                            {% if walk.status == 'scheduled' %}
+                                            <form method="post" action="{% url 'walks:complete' walk.pk %}" class="mb-0">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                <button type="submit" class="btn btn-sm btn-success" data-bs-toggle="tooltip" title="Marcar como realizado">
+                                                    <i class="feather-check"></i><span class="ms-1 d-none d-lg-inline">Realizar</span>
+                                                </button>
+                                            </form>
+                                            <a href="{% url 'walks:cancel' walk.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-sm btn-outline-danger" data-bs-toggle="tooltip" title="Cancelar passeio">
+                                                <i class="feather-x"></i>
+                                            </a>
+                                            <a href="{% url 'walks:miss' walk.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-sm btn-outline-warning" data-bs-toggle="tooltip" title="Registrar não realizado">
+                                                <i class="feather-alert-circle"></i>
+                                            </a>
+                                            {% else %}
+                                            <form method="post" action="{% url 'walks:revert' walk.pk %}" class="mb-0">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                                <button type="submit" class="btn btn-sm btn-light-brand" data-bs-toggle="tooltip" title="Reverter para previsto">
+                                                    <i class="feather-corner-up-left"></i><span class="ms-1 d-none d-lg-inline">Reverter</span>
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-5">
+                    <i class="feather-calendar fs-1 d-block mb-3"></i>
+                    <p class="text-muted mb-0">Nenhum passeio no período{% if current_status %} com os filtros selecionados{% endif %}.</p>
+                </div>
+                {% endif %}
+            </div>
+            {% if page_obj.has_other_pages %}
+            <div class="card-footer">
+                {% include 'base/_pagination.html' %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

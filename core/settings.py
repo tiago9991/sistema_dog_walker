@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     'base',
     'clients',
     'dogs',
+    'scheduling',
+    'walks',
 ]
 
 MIDDLEWARE = [
