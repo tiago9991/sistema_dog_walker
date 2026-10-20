@@ -1,0 +1,63 @@
+{% extends 'base/base.html' %}
+
+{% block title %}{% if client %}Editar cliente{% else %}Novo cliente{% endif %} — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}{% if client %}Editar cliente{% else %}Novo cliente{% endif %}{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'clients:list' %}">Clientes</a></li>
+    <li class="breadcrumb-item">{% if client %}{{ client.name }}{% else %}Novo cliente{% endif %}</li>
+</ul>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xxl-8 col-md-12">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="card stretch stretch-full">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Dados do cliente</h5>
+                </div>
+                <div class="card-body">
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+                            <i class="feather-alert-circle"></i>
+                            <span class="fs-12">{{ form.non_field_errors.0 }}</span>
+                        </div>
+                    {% endif %}
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Nome</label>
+                            {{ form.name }}
+                            {% for error in form.name.errors %}<div class="fs-11 text-danger mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ form.phone.id_for_label }}">Telefone</label>
+                            {{ form.phone }}
+                            {% for error in form.phone.errors %}<div class="fs-11 text-danger mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ form.email.id_for_label }}">E-mail</label>
+                            {{ form.email }}
+                            {% for error in form.email.errors %}<div class="fs-11 text-danger mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label" for="{{ form.notes.id_for_label }}">Observações</label>
+                            {{ form.notes }}
+                            {% for error in form.notes.errors %}<div class="fs-11 text-danger mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer d-flex align-items-center gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="feather-check me-2"></i><span>Salvar</span>
+                    </button>
+                    <a href="{% if client %}{% url 'clients:detail' client.pk %}{% else %}{% url 'clients:list' %}{% endif %}" class="btn btn-light-brand">Cancelar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

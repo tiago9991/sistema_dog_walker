@@ -45,6 +45,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'base',
+    'clients',
+    'dogs',
 ]
 
 MIDDLEWARE = [
@@ -135,6 +137,19 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Design system assets served directly from the official reference
+# (design_system/refs/duralux — PRD section 20).
+STATICFILES_DIRS = [BASE_DIR / 'design_system' / 'refs' / 'duralux']
+
+# Default primary key field type
+# https://docs.djangoproject.com/en/6.1/ref/settings/#default-auto-field
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Authentication (PRD section 4 / RF-001)
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'home'
+LOGOUT_REDIRECT_URL = 'login'
 
 
 # Email

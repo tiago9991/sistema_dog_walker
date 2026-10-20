@@ -1,0 +1,107 @@
+{% extends 'base/base.html' %}
+
+{% block title %}{{ dog.name }} — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}
+{{ dog.name }}
+{% if dog.is_active %}
+<span class="badge bg-soft-success text-success ms-2">Ativo</span>
+{% else %}
+<span class="badge bg-soft-danger text-danger ms-2">Desativado</span>
+{% endif %}
+{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'clients:list' %}">Clientes</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'clients:detail' dog.client.pk %}">{{ dog.client.name }}</a></li>
+    <li class="breadcrumb-item">{{ dog.name }}</li>
+</ul>
+{% endblock %}
+
+{% block page_actions %}
+<div class="d-flex align-items-center gap-2">
+    {% if perms.dogs.change_dog %}
+    <a href="{% url 'dogs:update' dog.client.pk dog.pk %}" class="btn btn-light-brand btn-md">
+        <i class="feather-edit-3 me-2"></i><span>Editar</span>
+    </a>
+    {% if dog.is_active %}
+    <form method="post" action="{% url 'dogs:deactivate' dog.client.pk dog.pk %}" class="mb-0" onsubmit="return confirm('Desativar este cachorro? O histórico será preservado.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-danger btn-md">
+            <i class="feather-power me-2"></i><span>Desativar</span>
+        </button>
+    </form>
+    {% else %}
+    <form method="post" action="{% url 'dogs:activate' dog.client.pk dog.pk %}" class="mb-0">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success btn-md">
+            <i class="feather-check me-2"></i><span>Reativar</span>
+        </button>
+    </form>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xxl-4 col-md-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Dados</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="fs-12 text-muted mb-1">Cliente</div>
+                    <div class="fw-semibold text-dark">
+                        <a href="{% url 'clients:detail' dog.client.pk %}" class="text-primary">{{ dog.client.name }}</a>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="fs-12 text-muted mb-1">Raça</div>
+                    <div class="fw-semibold text-dark">{{ dog.breed|default:'—' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="fs-12 text-muted mb-1">Observações</div>
+                    <div class="fw-semibold text-dark">{{ dog.notes|default:'—' }}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="fs-12 text-muted mb-1">Situação</div>
+                    <div>
+                        {% if dog.is_active %}
+                        <span class="badge bg-soft-success text-success">Ativo</span>
+                        {% else %}
+                        <span class="badge bg-soft-danger text-danger">Desativado</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xxl-8 col-md-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Histórico</h5>
+            </div>
+            <div class="card-body">
+                <div class="p-3 border border-dashed rounded mb-3">
+                    <div class="fs-12 text-muted mb-1">Cadastrado em</div>
+                    <div class="fw-semibold text-dark">{{ dog.created_at|date:'d/m/Y H:i' }}</div>
+                </div>
+                <div class="p-3 border border-dashed rounded mb-3">
+                    <div class="fs-12 text-muted mb-1">Atualizado em</div>
+                    <div class="fw-semibold text-dark">{{ dog.updated_at|date:'d/m/Y H:i' }}</div>
+                </div>
+                <div class="p-3 border border-dashed rounded {% if not dog.is_active %}border-danger{% endif %}">
+                    <div class="fs-12 text-muted mb-1">Desativado em</div>
+                    <div class="fw-semibold text-dark">{% if dog.deactivated_at %}{{ dog.deactivated_at|date:'d/m/Y H:i' }}{% else %}— (cachorro ativo){% endif %}</div>
+                </div>
+                <p class="fs-12 text-muted mt-3 mb-0">
+                    O histórico completo de passeios deste cachorro será exibido nas próximas sprints.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

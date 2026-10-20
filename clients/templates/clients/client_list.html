@@ -1,0 +1,117 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Clientes — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}Clientes{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item">Clientes</li>
+</ul>
+{% endblock %}
+
+{% block page_actions %}
+<form method="get" action="{% url 'clients:list' %}" class="input-group search-form" role="search">
+    <span class="input-group-text"><i class="feather-search fs-6 text-muted"></i></span>
+    <input type="text" name="q" value="{{ query }}" class="form-control search-input-field" placeholder="Pesquisar cliente..." aria-label="Pesquisar cliente">
+    {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+</form>
+{% if perms.clients.add_client %}
+<a href="{% url 'clients:create' %}" class="btn btn-primary btn-md">
+    <i class="feather-plus me-2"></i><span>Novo cliente</span>
+</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Lista de clientes</h5>
+                <div class="card-header-action ms-auto">
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="?{% if query %}q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status == '' %}btn-primary{% else %}btn-light-brand{% endif %}">Todos</a>
+                        <a href="?status=active{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status == 'active' %}btn-primary{% else %}btn-light-brand{% endif %}">Ativos</a>
+                        <a href="?status=inactive{% if query %}&q={{ query|urlencode }}{% endif %}" class="btn btn-sm {% if status == 'inactive' %}btn-primary{% else %}btn-light-brand{% endif %}">Desativados</a>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body custom-card-action p-0">
+                {% if clients %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="border-b">
+                                <th>Cliente</th>
+                                <th>Cachorros</th>
+                                <th>Situação</th>
+                                <th>Cadastrado em</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for client in clients %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'clients:detail' client.pk %}">
+                                        <span class="d-block">{{ client.name }}</span>
+                                        <span class="fs-12 d-block fw-normal text-muted">
+                                            {% if client.phone %}{{ client.phone }}{% endif %}
+                                            {% if client.phone and client.email %} · {% endif %}
+                                            {% if client.email %}{{ client.email }}{% endif %}
+                                        </span>
+                                    </a>
+                                </td>
+                                <td><span class="badge small bg-gray-200 rounded text-dark">{{ client.dog_count }}</span></td>
+                                <td>
+                                    {% if client.is_active %}
+                                    <span class="badge bg-soft-success text-success">Ativo</span>
+                                    {% else %}
+                                    <span class="badge bg-soft-danger text-danger">Desativado</span>
+                                    {% endif %}
+                                </td>
+                                <td class="fs-12 text-muted">{{ client.created_at|date:'d/m/Y H:i' }}</td>
+                                <td class="text-end">
+                                    <div class="d-flex align-items-center justify-content-end gap-3">
+                                        <a href="{% url 'clients:detail' client.pk %}" data-bs-toggle="tooltip" title="Visualizar"><i class="feather-external-link"></i></a>
+                                        {% if perms.clients.change_client %}
+                                        <a href="{% url 'clients:update' client.pk %}" data-bs-toggle="tooltip" title="Editar"><i class="feather-edit-3"></i></a>
+                                        {% if client.is_active %}
+                                        <form method="post" action="{% url 'clients:deactivate' client.pk %}" class="mb-0" onsubmit="return confirm('Desativar este cliente? Os dados históricos serão preservados.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-link p-0 text-danger" data-bs-toggle="tooltip" title="Desativar"><i class="feather-power"></i></button>
+                                        </form>
+                                        {% else %}
+                                        <form method="post" action="{% url 'clients:activate' client.pk %}" class="mb-0">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-link p-0 text-success" data-bs-toggle="tooltip" title="Reativar"><i class="feather-check"></i></button>
+                                        </form>
+                                        {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-5">
+                    <i class="feather-users fs-1 d-block mb-3"></i>
+                    <p class="text-muted mb-3">Nenhum cliente encontrado.</p>
+                    {% if perms.clients.add_client %}
+                    <a href="{% url 'clients:create' %}" class="btn btn-sm btn-primary"><i class="feather-plus me-2"></i><span>Cadastrar cliente</span></a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% if clients.has_other_pages %}
+            <div class="card-footer">
+                {% include 'base/_pagination.html' %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

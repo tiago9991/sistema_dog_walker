@@ -1,0 +1,27 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Acesso negado — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+
+{% block page_title %}Acesso negado{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xxl-4 col-md-6">
+        <div class="card stretch stretch-full">
+            <div class="card-body text-center p-4">
+                <div class="avatar-text avatar-lg bg-soft-danger text-danger mx-auto mb-3">
+                    <i class="feather-shield"></i>
+                </div>
+                <h6 class="fw-bold text-dark mb-2">Acesso negado</h6>
+                <p class="fs-12 text-muted mb-4">
+                    Você não possui permissão para acessar este recurso.
+                    Se acredita que deveria ter acesso, contate o administrador.
+                </p>
+                <a href="{% url 'clients:list' %}" class="btn btn-light-brand">
+                    <i class="feather-arrow-left me-2"></i><span>Voltar</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

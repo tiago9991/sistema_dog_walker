@@ -126,6 +126,37 @@ O sistema deve utilizar:
 
 A interface pode ocultar ações que o usuário não pode executar, mas isso nunca substitui a autorização no backend.
 
+## 4.4 Modelo de autorização implementado (Sprint 3)
+
+Autenticação:
+
+- `/login/` e `/logout/` (logout exclusivamente via POST);
+- páginas de autenticação próprias em pt-br, conforme o design system;
+- toda rota de negócio exige login (`LoginRequiredMixin`/`@login_required`)
+  e redireciona para `/login/?next=...`;
+- `/health/` permanece público (seção 16).
+
+Grupos (criados pela migration `base.0001_groups`):
+
+| Grupo | Permissões |
+|---|---|
+| `Operação` | `view`/`add`/`change` de `Client` e `Dog` |
+| `Leitura` | `view` de `Client` e `Dog` |
+
+Mapeamento de ações:
+
+- CRUD de clientes e cachorros → permissões nativas `view_*`, `add_*`,
+  `change_*` de cada model;
+- desativação/reativação (soft) → `change_*`;
+- `delete_*` não é concedido a grupo algum: o histórico deve ser preservado
+  (RF-002/RF-003); remoção física só é possível no Django Admin;
+- administração de usuários, grupos e permissões: Django Admin nativo
+  (`/admin/`), restrito a `is_staff`.
+
+Cachorros são acessíveis apenas sob o escopo do seu cliente
+(`/clients/<client_pk>/dogs/...`), com querysets filtrados por `client_pk`
+acesso por ID de outro escopo → 404 (RF-003).
+
 ---
 
 # 5. Requisitos funcionais
@@ -544,7 +575,16 @@ Utilizar usuário nativo do Django.
 
 Representa o cliente do Dog Walker.
 
-Campos de negócio definitivos devem ser definidos antes da migration inicial.
+Campos de negócio definitivos (definidos na Sprint 4 — decisão 1 da seção 53 resolvida):
+
+| Campo | Tipo | Observação |
+|---|---|---|
+| `name` | `CharField(150)` | obrigatório; pesquisável |
+| `phone` | `CharField(20)` | opcional; pesquisável |
+| `email` | `EmailField` | opcional; pesquisável |
+| `notes` | `TextField` | opcional |
+| `is_active` | `BooleanField` | desativação soft; histórico preservado |
+| `deactivated_at` | `DateTimeField` | preenchido na desativação |
 
 Campos técnicos obrigatórios:
 
@@ -557,9 +597,19 @@ Representa um cachorro.
 
 Relacionamento:
 
-`Dog -> Client`
+`Dog -> Client` (`ForeignKey`, `on_delete=PROTECT`, `related_name="dogs"`)
 
 Um cliente pode possuir vários cachorros.
+
+Campos de negócio definitivos (definidos na Sprint 5 — decisão 2 da seção 53 resolvida):
+
+| Campo | Tipo | Observação |
+|---|---|---|
+| `name` | `CharField(150)` | obrigatório |
+| `breed` | `CharField(100)` | opcional |
+| `notes` | `TextField` | opcional |
+| `is_active` | `BooleanField` | desativação soft; histórico preservado |
+| `deactivated_at` | `DateTimeField` | preenchido na desativação |
 
 Campos técnicos:
 
@@ -1101,43 +1151,43 @@ Cada tarefa deve:
 
 ## Sprint 3 — Autenticação e permissões
 
-- [ ] Configurar login.
-- [ ] Configurar logout.
-- [ ] Criar páginas de autenticação.
-- [ ] Configurar proteção de rotas.
-- [ ] Definir grupos.
-- [ ] Definir permissões.
-- [ ] Configurar permissões no Admin.
-- [ ] Validar acesso não autorizado.
-- [ ] Documentar modelo de autorização.
+- [x] Configurar login.
+- [x] Configurar logout.
+- [x] Criar páginas de autenticação.
+- [x] Configurar proteção de rotas.
+- [x] Definir grupos.
+- [x] Definir permissões.
+- [x] Configurar permissões no Admin.
+- [x] Validar acesso não autorizado.
+- [x] Documentar modelo de autorização.
 
 ## Sprint 4 — Clientes
 
-- [ ] Criar app/domain de clientes.
-- [ ] Criar model Client.
-- [ ] Criar migration.
-- [ ] Criar Admin.
-- [ ] Criar formulário.
-- [ ] Criar criação.
-- [ ] Criar edição.
-- [ ] Criar visualização.
-- [ ] Criar listagem.
-- [ ] Criar pesquisa.
-- [ ] Criar desativação.
-- [ ] Aplicar permissões.
-- [ ] Validar isolamento de dados.
+- [x] Criar app/domain de clientes.
+- [x] Criar model Client.
+- [x] Criar migration.
+- [x] Criar Admin.
+- [x] Criar formulário.
+- [x] Criar criação.
+- [x] Criar edição.
+- [x] Criar visualização.
+- [x] Criar listagem.
+- [x] Criar pesquisa.
+- [x] Criar desativação.
+- [x] Aplicar permissões.
+- [x] Validar isolamento de dados.
 
 ## Sprint 5 — Cachorros
 
-- [ ] Criar model Dog.
-- [ ] Relacionar Dog com Client.
-- [ ] Criar migration.
-- [ ] Criar CRUD.
-- [ ] Criar interface dentro do cliente.
-- [ ] Implementar múltiplos cachorros.
-- [ ] Implementar desativação.
-- [ ] Criar histórico básico.
-- [ ] Validar isolamento.
+- [x] Criar model Dog.
+- [x] Relacionar Dog com Client.
+- [x] Criar migration.
+- [x] Criar CRUD.
+- [x] Criar interface dentro do cliente.
+- [x] Implementar múltiplos cachorros.
+- [x] Implementar desativação.
+- [x] Criar histórico básico.
+- [x] Validar isolamento.
 
 ## Sprint 6 — Programação
 
@@ -2403,8 +2453,8 @@ Uma tarefa somente pode ser considerada concluída quando:
 
 Os pontos abaixo devem ser decididos antes da implementação definitiva do domínio correspondente.
 
-- [ ] Campos completos de `Client`.
-- [ ] Campos completos de `Dog`.
+- [x] Campos completos de `Client`.
+- [x] Campos completos de `Dog`.
 - [ ] Campos completos de `Walk`.
 - [ ] Estados definitivos de `Walk`.
 - [ ] Regras de cancelamento.

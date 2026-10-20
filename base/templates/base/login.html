@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Entrar — Sistema de Gestão para Dog Walker Inteligente</title>
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
+    <!-- Design system assets (design_system/refs/duralux — PRD seção 20) -->
+    <link rel="stylesheet" type="text/css" href="{% static 'css/bootstrap.mim.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/vendors.min.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/theme.min.css' %}">
+</head>
+<body>
+    <main class="nxl-container bg-gray-100">
+        <div class="d-flex min-vh-100 align-items-center justify-content-center p-4">
+            <div class="row w-100 justify-content-center g-0">
+                <div class="col-xxl-3 col-lg-4 col-md-6 col-sm-8 col-12">
+                    <div class="card stretch stretch-full">
+                        <div class="card-body p-4">
+                            <div class="text-center mb-4">
+                                <a href="{% url 'login' %}" class="d-inline-block mb-3">
+                                    <img src="{% static 'images/logo-abbr.png' %}" alt="Sistema de Gestão para Dog Walker Inteligente" class="img-fluid" style="height: 48px;">
+                                </a>
+                                <h5 class="m-b-10">Sistema de Gestão para Dog Walker Inteligente</h5>
+                                <p class="fs-12 text-muted mb-0">Entre para acessar o sistema</p>
+                            </div>
+
+                            {% if form.non_field_errors %}
+                                <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+                                    <i class="feather-alert-circle"></i>
+                                    <span class="fs-12">Usuário ou senha inválidos.</span>
+                                </div>
+                            {% endif %}
+
+                            <form method="post" action="{% url 'login' %}" novalidate>
+                                {% csrf_token %}
+                                {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+                                <div class="mb-3">
+                                    <label class="form-label" for="{{ form.username.id_for_label }}">Usuário</label>
+                                    {{ form.username }}
+                                    {% for error in form.username.errors %}
+                                        <div class="fs-11 text-danger mt-1">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label" for="{{ form.password.id_for_label }}">Senha</label>
+                                    {{ form.password }}
+                                    {% for error in form.password.errors %}
+                                        <div class="fs-11 text-danger mt-1">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-md w-100">
+                                    <i class="feather-log-in me-2"></i><span>Entrar</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>
