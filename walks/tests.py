@@ -1,9 +1,11 @@
-"""Walks tests (Sprint 7/8 — RF-005..RF-009, RF-012/RF-013): deterministic
-generation, window rules, idempotency, unique constraint, command, state
-machine, period views, filters and status actions."""
+"""Walks tests (Sprint 7/8/11 — RF-005..RF-009, RF-011/RF-012/RF-013,
+RNF-004): deterministic generation, window rules, idempotency, unique
+constraint, command, state machine, period views, filters, status
+actions, monthly control and the background generation task."""
 
 from datetime import date, timedelta
 from io import StringIO
+from unittest import mock
 
 from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
@@ -15,15 +17,19 @@ from django.utils import timezone
 
 from clients.models import Client
 from dogs.models import Dog
+from notifications.models import Notification
 from scheduling.models import WalkSchedule
 from walks.models import Walk
 from walks.services import (
     GENERATION_HORIZON_DAYS,
     GENERATION_LOOKBACK_DAYS,
     generate_walks,
+    month_bounds,
+    monthly_control,
     resync_dog_walks,
     transition_walk,
 )
+from walks.tasks import generate_walks_task
 
 # Fixed "today" so window math is deterministic (Wednesday).
 TODAY = date(2026, 10, 21)
@@ -467,3 +473,369 @@ class WalkActionTests(WalkTestBase):
             self.client.get(reverse('walks:cancel', kwargs={'pk': self.walk.pk})).status_code,
             403,
         )
+
+
+class MonthlyControlServiceTests(WalkTestBase):
+    """Sprint 9 — RF-011 calculation rules, validated with fabricated data.
+
+    dog_a: Mon/Wed/Fri since 2026-10-01; generation window [2026-10-14,
+    2026-11-20] creates the October walks from 14/10 onwards.
+    """
+
+    OCTOBER = (2026, 10)
+    # Contracted Mon/Wed/Fri dates in October 2026: Mon 5,12,19,26;
+    # Wed 7,14,21,28; Fri 2,9,16,23,30.
+    DOG_A_CONTRACTED_OCTOBER = 13
+    # Walks generated inside the window (from 14/10): 14,16,19,21,23,26,28,30.
+    DOG_A_WALKS_OCTOBER = 8
+
+    def setUp(self):
+        WalkSchedule.objects.create(
+            dog=self.dog_a,
+            start_date=date(2026, 10, 1),
+            monday=True,
+            wednesday=True,
+            friday=True,
+        )
+        generate_walks(today=TODAY)
+
+    def _rows(self, year, month, **filters):
+        rows, totals = monthly_control(*month_bounds(year, month), **filters)
+        return {row['dog'].pk: row for row in rows}, totals
+
+    def test_counters_with_mixed_statuses(self):
+        # Fabricated outcomes: 3 completed, 1 cancelled, 1 missed in October.
+        for walk_date in (date(2026, 10, 14), date(2026, 10, 16), date(2026, 10, 19)):
+            transition_walk(
+                Walk.objects.get(dog=self.dog_a, date=walk_date),
+                Walk.STATUS_COMPLETED,
+            )
+        transition_walk(
+            Walk.objects.get(dog=self.dog_a, date=date(2026, 10, 21)),
+            Walk.STATUS_CANCELLED,
+        )
+        transition_walk(
+            Walk.objects.get(dog=self.dog_a, date=date(2026, 10, 23)),
+            Walk.STATUS_MISSED,
+        )
+
+        rows, totals = self._rows(*self.OCTOBER)
+        row = rows[self.dog_a.pk]
+        self.assertEqual(row['contracted'], self.DOG_A_CONTRACTED_OCTOBER)
+        self.assertEqual(row['scheduled'], 3)  # 26, 28, 30
+        self.assertEqual(row['completed'], 3)
+        self.assertEqual(row['cancelled'], 1)
+        self.assertEqual(row['missed'], 1)
+        # remaining = contracted - completed - cancelled - missed.
+        self.assertEqual(row['remaining'], 13 - 3 - 1 - 1)
+        self.assertEqual(row['progress'], 23)  # round(100*3/13)
+
+        for counter, value in (
+            ('contracted', 13),
+            ('scheduled', 3),
+            ('completed', 3),
+            ('cancelled', 1),
+            ('missed', 1),
+            ('remaining', 8),
+        ):
+            self.assertEqual(totals[counter], value, counter)
+
+    def test_contracted_is_independent_of_generation_window(self):
+        # December 2026 is beyond the generation horizon: contracted dates
+        # still count (from the schedules), no walks exist yet.
+        rows, totals = self._rows(2026, 12)
+        row = rows[self.dog_a.pk]
+        self.assertEqual(row['contracted'], 13)  # Mon/Wed/Fri in December
+        self.assertEqual(row['scheduled'], 0)
+        self.assertEqual(row['completed'], 0)
+        self.assertEqual(row['remaining'], 13)
+
+    def test_end_date_limits_contracted(self):
+        schedule = WalkSchedule.objects.get(dog=self.dog_a)
+        schedule.end_date = date(2026, 10, 15)
+        schedule.save()
+        rows, _ = self._rows(*self.OCTOBER)
+        # Mon/Wed/Fri until 15/10: Mon 5,12; Wed 7,14; Fri 2,9.
+        self.assertEqual(rows[self.dog_a.pk]['contracted'], 6)
+
+    def test_remaining_never_negative_when_contract_shrinks(self):
+        # All October walks completed, then the schedule is deactivated:
+        # the current contract is zero, remaining is clamped at 0.
+        for walk in Walk.objects.filter(dog=self.dog_a, date__lte=date(2026, 10, 31)):
+            transition_walk(walk, Walk.STATUS_COMPLETED)
+        schedule = WalkSchedule.objects.get(dog=self.dog_a)
+        schedule.is_active = False
+        schedule.save()
+        rows, _ = self._rows(*self.OCTOBER)
+        row = rows[self.dog_a.pk]
+        self.assertEqual(row['contracted'], 0)
+        self.assertEqual(row['completed'], self.DOG_A_WALKS_OCTOBER)
+        self.assertEqual(row['remaining'], 0)
+
+    def test_inactive_dog_keeps_history_but_has_no_contract(self):
+        schedule = WalkSchedule.objects.create(
+            dog=self.dog_b, start_date=date(2026, 10, 1), tuesday=True
+        )
+        generate_walks(today=TODAY)  # dog_b: 20/10, 27/10 within the window
+        schedule.dog.is_active = False
+        schedule.dog.save()
+
+        rows, _ = self._rows(*self.OCTOBER)
+        row = rows[self.dog_b.pk]
+        self.assertEqual(row['contracted'], 0)  # excluded from the contract
+        self.assertEqual(row['scheduled'], 2)  # history stays visible
+        self.assertEqual(row['remaining'], 0)
+
+    def test_dogs_without_walks_or_contract_are_not_listed(self):
+        rows, _ = self._rows(*self.OCTOBER)
+        self.assertIn(self.dog_a.pk, rows)
+        self.assertNotIn(self.dog_b.pk, rows)  # no schedule, no walks
+
+    def test_client_and_dog_filters(self):
+        WalkSchedule.objects.create(
+            dog=self.dog_b, start_date=date(2026, 10, 1), tuesday=True
+        )
+        generate_walks(today=TODAY)
+
+        rows, _ = self._rows(*self.OCTOBER, client=self.client_a)
+        self.assertEqual(set(rows), {self.dog_a.pk})
+
+        rows, _ = self._rows(*self.OCTOBER, dog=self.dog_b)
+        self.assertEqual(set(rows), {self.dog_b.pk})
+        # Contracted Tuesdays in October: 6, 13, 20, 27.
+        self.assertEqual(rows[self.dog_b.pk]['contracted'], 4)
+
+    def test_month_without_contract_or_walks_is_empty(self):
+        # Open-ended schedules contract indefinitely, so an empty month
+        # requires a period bound: beyond the end_date there is no contract
+        # and no walks were ever generated for December.
+        schedule = WalkSchedule.objects.get(dog=self.dog_a)
+        schedule.end_date = date(2026, 10, 31)
+        schedule.save()
+        rows, totals = self._rows(2026, 12)
+        self.assertEqual(rows, {})
+        self.assertEqual(totals['contracted'], 0)
+        self.assertEqual(totals['remaining'], 0)
+
+
+class MonthlyControlViewTests(WalkTestBase):
+    """Sprint 9 — RF-011 per-client/per-dog views, filters and access."""
+
+    def setUp(self):
+        WalkSchedule.objects.create(
+            dog=self.dog_a,
+            start_date=date(2026, 10, 1),
+            monday=True,
+            wednesday=True,
+            friday=True,
+        )
+        WalkSchedule.objects.create(
+            dog=self.dog_b, start_date=date(2026, 10, 1), tuesday=True
+        )
+        generate_walks(today=TODAY)
+
+    def test_control_view_groups_by_client_with_totals(self):
+        self.login(self.operator)
+        response = self.client.get(reverse('walks:control'), {'month': '2026-10'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Controle mensal')
+
+        groups = {g['client'].name: g for g in response.context['client_groups']}
+        self.assertEqual(set(groups), {'Cliente A', 'Cliente B'})
+        # Visão por cliente: per-client subtotals; visão por cachorro: rows.
+        self.assertEqual(
+            {row['dog'].name for row in groups['Cliente A']['rows']}, {'Rex'}
+        )
+        self.assertEqual(groups['Cliente A']['totals']['contracted'], 13)
+        self.assertEqual(groups['Cliente B']['totals']['contracted'], 4)
+
+        totals = response.context['totals']
+        self.assertEqual(totals['contracted'], 17)
+        self.assertEqual(totals['scheduled'], 10)  # 8 (Rex) + 2 (Bidu)
+
+    def test_client_filter_scopes_to_one_client(self):
+        self.login(self.operator)
+        response = self.client.get(
+            reverse('walks:control'), {'month': '2026-10', 'client': self.client_a.pk}
+        )
+        groups = response.context['client_groups']
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['client'], self.client_a)
+        self.assertEqual(response.context['totals']['contracted'], 13)
+
+    def test_dog_filter_scopes_to_one_dog(self):
+        self.login(self.operator)
+        response = self.client.get(
+            reverse('walks:control'), {'month': '2026-10', 'dog': self.dog_b.pk}
+        )
+        groups = response.context['client_groups']
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(
+            {row['dog'].name for row in groups[0]['rows']}, {'Bidu'}
+        )
+
+    def test_invalid_month_falls_back_to_current_month(self):
+        self.login(self.operator)
+        response = self.client.get(reverse('walks:control'), {'month': 'banana'})
+        self.assertEqual(response.status_code, 200)
+        today = timezone.localdate()
+        self.assertEqual(
+            response.context['current_month'],
+            f'{today.year:04d}-{today.month:02d}',
+        )
+
+    def test_month_navigation_urls_keep_filters(self):
+        self.login(self.operator)
+        response = self.client.get(
+            reverse('walks:control'),
+            {'month': '2026-10', 'client': self.client_a.pk},
+        )
+        self.assertIn('month=2026-09', response.context['nav']['prev'])
+        self.assertIn(f'client={self.client_a.pk}', response.context['nav']['prev'])
+        self.assertIn('month=2026-11', response.context['nav']['next'])
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.get(reverse('walks:control'))
+        self.assertRedirects(
+            response,
+            f"{reverse('login')}?next={reverse('walks:control')}",
+            fetch_redirect_response=False,
+        )
+
+    def test_user_without_permissions_gets_403(self):
+        self.login(self.no_access)
+        self.assertEqual(self.client.get(reverse('walks:control')).status_code, 403)
+
+    def test_reader_can_view_control(self):
+        self.login(self.reader)
+        response = self.client.get(reverse('walks:control'), {'month': '2026-10'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Cliente A')
+
+
+class GenerateTaskTests(WalkTestBase):
+    """Sprint 11 — background generation task (RF-005 via Celery, RNF-004)."""
+
+    def _schedule(self):
+        return WalkSchedule.objects.create(
+            dog=self.dog_a,
+            start_date=date(2026, 10, 1),
+            monday=True,
+            wednesday=True,
+            friday=True,
+        )
+
+    def test_task_generates_and_notifies_requester(self):
+        self._schedule()
+        stats = generate_walks_task(user_id=self.operator.pk)
+
+        self.assertGreater(stats['created'], 0)
+        notification = Notification.objects.get(recipient=self.operator)
+        self.assertEqual(notification.level, Notification.LEVEL_SUCCESS)
+        self.assertIn('Geração de passeios concluída', notification.title)
+        self.assertEqual(notification.link, reverse('walks:day'))
+        self.assertIn(f"{stats['created']} passeio(s) criado(s)", notification.message)
+        self.assertFalse(notification.is_read)
+
+    def test_task_without_user_creates_no_notification(self):
+        # Scheduled runs (Beat) have no requester — no notification.
+        self._schedule()
+        stats = generate_walks_task()
+        self.assertGreater(stats['created'], 0)
+        self.assertFalse(Notification.objects.exists())
+
+    def test_task_with_unknown_user_is_safe(self):
+        generate_walks_task(user_id=999_999)
+        self.assertFalse(Notification.objects.exists())
+
+    def test_task_is_idempotent(self):
+        self._schedule()
+        first = generate_walks_task()
+        second = generate_walks_task()
+        self.assertGreater(first['created'], 0)
+        self.assertEqual(second['created'], 0)
+
+
+class WalkDispatchTests(WalkTestBase):
+    """Sprint 11 — non-blocking dispatch of the generation task (RNF-004).
+
+    The task is patched, so these tests prove the REQUEST only dispatches:
+    nothing runs synchronously and the response returns immediately.
+    """
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch('walks.views.generate_walks_task')
+        self.task = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_ajax_dispatch_only_calls_delay(self):
+        self.login(self.operator)
+        response = self.client.post(
+            reverse('walks:generate'),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['ok'])
+        self.assertIn('notificação', payload['detail'])
+        self.task.delay.assert_called_once_with(user_id=self.operator.pk)
+        # RNF-004: the request itself created no walks/notifications —
+        # the worker does the work.
+        self.assertFalse(Walk.objects.exists())
+        self.assertFalse(Notification.objects.exists())
+
+    def test_non_ajax_dispatch_redirects_with_message(self):
+        self.login(self.operator)
+        response = self.client.post(reverse('walks:generate'), follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.task.delay.assert_called_once_with(user_id=self.operator.pk)
+        self.assertContains(response, 'iniciada em segundo plano')
+
+    def test_dispatch_requires_post(self):
+        self.login(self.operator)
+        response = self.client.get(reverse('walks:generate'))
+        self.assertEqual(response.status_code, 405)
+        self.task.delay.assert_not_called()
+
+    def test_dispatch_requires_add_walk_permission(self):
+        self.login(self.reader)  # view-only group
+        self.assertEqual(
+            self.client.post(reverse('walks:generate')).status_code, 403
+        )
+        self.task.delay.assert_not_called()
+
+        self.login(self.no_access)
+        self.assertEqual(
+            self.client.post(reverse('walks:generate')).status_code, 403
+        )
+
+    def test_anonymous_redirected_to_login(self):
+        response = self.client.post(reverse('walks:generate'))
+        self.assertRedirects(
+            response,
+            f"{reverse('login')}?next={reverse('walks:generate')}",
+            fetch_redirect_response=False,
+        )
+        self.task.delay.assert_not_called()
+
+    def test_broker_failure_is_reported_not_raised(self):
+        self.task.delay.side_effect = OSError('broker unreachable')
+        self.login(self.operator)
+        response = self.client.post(
+            reverse('walks:generate'),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(response.json()['ok'])
+        # The interface stays usable — the error is just feedback.
+
+    def test_generate_button_renders_for_operators_only(self):
+        self.login(self.operator)
+        response = self.client.get(reverse('walks:day'))
+        self.assertContains(response, reverse('walks:generate'))
+        self.assertContains(response, 'data-async-task')
+
+        self.login(self.reader)  # view-only: no button
+        response = self.client.get(reverse('walks:day'))
+        self.assertNotContains(response, reverse('walks:generate'))

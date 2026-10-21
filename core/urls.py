@@ -4,7 +4,14 @@ from django.contrib import admin
 from django.urls import include, path
 
 urlpatterns = [
+    # Celery panel in the Django Admin (PRD section 18 — Sprint 11). Must
+    # come before the admin catch-all paths.
+    path('admin/dj-control-room-base/', include('dj_control_room_base.urls')),
+    path('admin/dj-celery-panel/', include('dj_celery_panel.urls')),
     path('admin/', admin.site.urls),
+    # Dashboard is the application home (RF-010, Sprint 10) — un-namespaced
+    # so ``reverse('home')`` keeps resolving.
+    path('', include('dashboard.urls')),
     path('', include('base.urls')),
     path('clients/', include('clients.urls')),
     # Dog routes stay under their client's URL scope (RF-003), included at
@@ -16,4 +23,5 @@ urlpatterns = [
         include('scheduling.urls'),
     ),
     path('walks/', include('walks.urls')),
+    path('notifications/', include('notifications.urls')),
 ]

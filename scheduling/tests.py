@@ -152,7 +152,16 @@ class ScheduleCrudTests(ScheduleTestBase):
 
     def test_deactivate_removes_future_previstos_and_preserves_past(self):
         self.login(self.operator)
-        self.client.post(self.create_url(), self.schedule_data())
+        # All weekdays since the window start (today - 7), so past walks
+        # exist on any weekday the suite runs. The default mon/wed/fri +
+        # start_date = yesterday only creates past walks on some weekdays
+        # (flaky: failed whenever the last two days had no matching weekday).
+        data = self.schedule_data(
+            start_date=(timezone.localdate() - timedelta(days=7)).isoformat(),
+            monday='on', tuesday='on', wednesday='on', thursday='on',
+            friday='on', saturday='on', sunday='on',
+        )
+        self.client.post(self.create_url(), data)
         schedule = WalkSchedule.objects.get(dog=self.dog_a)
         today = timezone.localdate()
         past_count = Walk.objects.filter(

@@ -44,11 +44,17 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Celery monitoring in the Django Admin (PRD section 18 — Sprint 11).
+    # Placeholder models are managed=False: no tables, no migrations.
+    'dj_control_room_base',
+    'dj_celery_panel',
     'base',
     'clients',
     'dogs',
     'scheduling',
     'walks',
+    'dashboard',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -73,6 +79,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                # Header bell: unread count + recent items (RNF-004).
+                'notifications.context_processors.notifications',
             ],
         },
     },
@@ -141,8 +149,12 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Design system assets served directly from the official reference
-# (design_system/refs/duralux — PRD section 20).
-STATICFILES_DIRS = [BASE_DIR / 'design_system' / 'refs' / 'duralux']
+# (design_system/refs/duralux — PRD section 20) plus the project's own
+# static assets (static/js — Sprint 11).
+STATICFILES_DIRS = [
+    BASE_DIR / 'design_system' / 'refs' / 'duralux',
+    BASE_DIR / 'static',
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/6.1/ref/settings/#default-auto-field
@@ -162,3 +174,44 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+# Cache (PRD sections 7 and 18): Redis when configured (Docker Compose and
+# production always set REDIS_URL), local memory for quick host runs.
+REDIS_URL = config('REDIS_URL', default='')
+
+CACHES = {
+    'default': (
+        {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+        }
+        if REDIS_URL
+        else {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}
+    )
+}
+
+
+# Celery (PRD section 18 — Sprint 11)
+# Broker: RabbitMQ. Result backend/cache: Redis (the Django cache above).
+# Without a broker configured (quick host runs without RabbitMQ) tasks
+# run synchronously (eager) so the feature keeps working; Docker Compose
+# and production always set CELERY_BROKER_URL (see compose.yml).
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='')
+CELERY_TASK_ALWAYS_EAGER = config(
+    'CELERY_TASK_ALWAYS_EAGER', default=not CELERY_BROKER_URL, cast=bool
+)
+# Results are stored in the same Redis as the cache (PRD section 18).
+# Without Redis (eager mode) results stay in memory — no backend is
+# configured ("django-cache" was avoided on purpose: it requires the
+# django-celery-results package just to reuse the Django cache).
+CELERY_RESULT_BACKEND = REDIS_URL or None
+CELERY_TIMEZONE = TIME_ZONE
+# RabbitMQ 4.4 removed transient NON-exclusive queues (feature flag
+# ``transient_nonexcl_queues``); Celery 5.6/kombu 5.6 still declare the
+# remote-control (pidbox) and event (gossip/``celery events``) queues that
+# way by default. Exclusive transient queues remain supported and match
+# both semantics (one connection consumes each hostname's queue) — and
+# keep the auto-delete/x-expires lifecycle, leaving no stale queues behind.
+CELERY_CONTROL_QUEUE_EXCLUSIVE = True
+CELERY_EVENT_QUEUE_EXCLUSIVE = True

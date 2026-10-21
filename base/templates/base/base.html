@@ -31,16 +31,28 @@
                         <label>Navegação</label>
                     </li>
                     {% with current_app=request.resolver_match.app_name %}
+                    <li class="nxl-item{% if request.resolver_match.url_name == 'home' %} active{% endif %}">
+                        <a href="{% url 'home' %}" class="nxl-link{% if request.resolver_match.url_name == 'home' %} active{% endif %}">
+                            <span class="nxl-micon"><i class="feather-activity"></i></span>
+                            <span class="nxl-mtext">Dashboard</span>
+                        </a>
+                    </li>
                     <li class="nxl-item{% if current_app == 'clients' or current_app == 'dogs' %} active{% endif %}">
                         <a href="{% url 'clients:list' %}" class="nxl-link{% if current_app == 'clients' or current_app == 'dogs' %} active{% endif %}">
                             <span class="nxl-micon"><i class="feather-users"></i></span>
                             <span class="nxl-mtext">Clientes</span>
                         </a>
                     </li>
-                    <li class="nxl-item{% if current_app == 'walks' %} active{% endif %}">
-                        <a href="{% url 'walks:day' %}" class="nxl-link{% if current_app == 'walks' %} active{% endif %}">
+                    <li class="nxl-item{% if current_app == 'walks' and request.resolver_match.url_name != 'control' %} active{% endif %}">
+                        <a href="{% url 'walks:day' %}" class="nxl-link{% if current_app == 'walks' and request.resolver_match.url_name != 'control' %} active{% endif %}">
                             <span class="nxl-micon"><i class="feather-calendar"></i></span>
                             <span class="nxl-mtext">Passeios</span>
+                        </a>
+                    </li>
+                    <li class="nxl-item{% if request.resolver_match.url_name == 'control' %} active{% endif %}">
+                        <a href="{% url 'walks:control' %}" class="nxl-link{% if request.resolver_match.url_name == 'control' %} active{% endif %}">
+                            <span class="nxl-micon"><i class="feather-bar-chart-2"></i></span>
+                            <span class="nxl-mtext">Controle mensal</span>
                         </a>
                     </li>
                     {% endwith %}
@@ -81,6 +93,49 @@
             </div>
             <div class="header-right ms-auto">
                 <div class="d-flex align-items-center">
+                    {% if user.is_authenticated %}
+                    <!-- Notificações (design system: header bell pattern) -->
+                    <div class="dropdown nxl-h-item">
+                        <a href="javascript:void(0);" class="nxl-head-link me-3" data-bs-toggle="dropdown" role="button" data-bs-auto-close="outside" aria-label="Notificações">
+                            <i class="feather-bell"></i>
+                            <span class="badge bg-danger nxl-h-badge" data-notifications-badge {% if not unread_notifications_count %}hidden{% endif %}>{{ unread_notifications_count }}</span>
+                        </a>
+                        <div class="dropdown-menu dropdown-menu-end nxl-h-dropdown nxl-notifications-menu">
+                            <div class="d-flex justify-content-between align-items-center notifications-head">
+                                <h6 class="fw-bold text-dark mb-0">Notificações</h6>
+                                {% if unread_notifications_count %}
+                                <form method="post" action="{% url 'notifications:mark_all_read' %}" class="mb-0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <button type="submit" class="btn btn-link p-0 fs-11 fw-semibold text-success">Marcar todas como lidas</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                            {% if recent_notifications %}
+                                {% for notification in recent_notifications %}
+                                <a href="{% if notification.link %}{{ notification.link }}{% else %}{% url 'notifications:list' %}{% endif %}" class="notifications-item d-flex align-items-start gap-3 {% if not notification.is_read %}bg-gray-100{% endif %}">
+                                    {% include 'notifications/_notification_icon.html' %}
+                                    <div class="notifications-desc">
+                                        <span class="font-body text-truncate-2-line {% if not notification.is_read %}fw-semibold text-dark{% else %}text-muted{% endif %}">{{ notification.title }}</span>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div class="notifications-date text-muted border-bottom border-bottom-dashed fs-12">{{ notification.created_at|date:'d/m/Y H:i' }}</div>
+                                            {% if not notification.is_read %}<i class="wd-8 ht-8 rounded-circle bg-primary"></i>{% endif %}
+                                        </div>
+                                    </div>
+                                </a>
+                                {% endfor %}
+                            {% else %}
+                            <div class="text-center p-4">
+                                <i class="feather-bell fs-1 d-block mb-3"></i>
+                                <p class="text-muted mb-0">Nenhuma notificação.</p>
+                            </div>
+                            {% endif %}
+                            <div class="text-center notifications-footer">
+                                <a href="{% url 'notifications:list' %}" class="fs-13 fw-semibold text-dark">Ver todas as notificações</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                     <div class="dropdown nxl-h-item">
                         <a href="javascript:void(0);" data-bs-toggle="dropdown" role="button" data-bs-auto-close="outside" class="nxl-head-link me-0 d-flex align-items-center">
                             <div class="avatar-text avatar-sm bg-soft-primary text-primary">{{ user.get_username|slice:":1"|upper }}</div>
@@ -156,6 +211,11 @@
     <!-- Design system scripts -->
     <script src="{% static 'js/vendors.min.js' %}"></script>
     <script src="{% static 'js/common-init.min.js' %}"></script>
+    {% if user.is_authenticated %}
+    <!-- Project script: background tasks + notifications (RNF-004) -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" id="scsi-toasts" style="z-index: 1080;"></div>
+    <script src="{% static 'js/scsi.js' %}"></script>
+    {% endif %}
     {% block scripts %}{% endblock %}
 </body>
 </html>

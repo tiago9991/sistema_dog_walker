@@ -1,6 +1,7 @@
-"""Walk views: period lists (day/week/month/history — PRD RF-006/RF-009/RF-012)
-and status actions (RF-007/RF-008)."""
+"""Walk views: period lists (day/week/month/history — PRD RF-006/RF-009/RF-012),
+monthly control (RF-011) and status actions (RF-007/RF-008)."""
 
+import logging
 from datetime import date, timedelta
 from urllib.parse import urlencode
 
@@ -8,18 +9,29 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.exceptions import ValidationError
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
-from django.views.generic import ListView, RedirectView
+from django.views.generic import ListView, TemplateView
 
 from clients.models import Client
 from dogs.models import Dog
 
 from walks.models import Walk
-from walks.services import transition_walk
+from walks.services import (
+    month_bounds,
+    monthly_control,
+    group_monthly_control_by_client,
+    parse_month,
+    shift_month,
+    transition_walk,
+)
+from walks.tasks import generate_walks_task
+
+logger = logging.getLogger(__name__)
 
 
 def _valid_int(value):
@@ -34,31 +46,6 @@ def _parse_iso_date(value):
         return date.fromisoformat(value or '')
     except ValueError:
         return None
-
-
-def _parse_month(value):
-    """``YYYY-MM`` → ``(year, month)`` or ``None``."""
-    try:
-        year, month = (int(part) for part in (value or '').split('-'))
-        if 1 <= month <= 12:
-            return year, month
-    except (ValueError, TypeError):
-        pass
-    return None
-
-
-def _month_bounds(year, month):
-    start = date(year, month, 1)
-    if month == 12:
-        end = date(year, 12, 31)
-    else:
-        end = date(year, month + 1, 1) - timedelta(days=1)
-    return start, end
-
-
-def _shift_month(year, month, delta):
-    total = year * 12 + (month - 1) + delta
-    return total // 12, total % 12 + 1
 
 
 class BaseWalkListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
@@ -218,15 +205,15 @@ class WalkMonthListView(BaseWalkListView):
     url_name = 'walks:month'
 
     def get_period(self):
-        parsed = _parse_month(self.request.GET.get('month'))
+        parsed = parse_month(self.request.GET.get('month'))
         if parsed is None:
             today = timezone.localdate()
             parsed = (today.year, today.month)
         self.month = parsed
-        return _month_bounds(*parsed)
+        return month_bounds(*parsed)
 
     def period_context(self):
-        start, end = _month_bounds(*self.month)
+        start, end = month_bounds(*self.month)
         return {
             'period_start': start,
             'period_end': end,
@@ -234,8 +221,8 @@ class WalkMonthListView(BaseWalkListView):
         }
 
     def nav_urls(self):
-        prev_year, prev_month = _shift_month(*self.month, delta=-1)
-        next_year, next_month = _shift_month(*self.month, delta=1)
+        prev_year, prev_month = shift_month(*self.month, delta=-1)
+        next_year, next_month = shift_month(*self.month, delta=1)
         return {
             'prev': self.url_for(month=f'{prev_year:04d}-{prev_month:02d}'),
             'next': self.url_for(month=f'{next_year:04d}-{next_month:02d}'),
@@ -250,17 +237,101 @@ class WalkHistoryListView(BaseWalkListView):
     descending = True
 
     def get_period(self):
-        parsed = _parse_month(self.request.GET.get('month'))
+        parsed = parse_month(self.request.GET.get('month'))
         if parsed is None:
             return None, None
-        return _month_bounds(*parsed)
+        return month_bounds(*parsed)
 
     def period_context(self):
-        parsed = _parse_month(self.request.GET.get('month'))
+        parsed = parse_month(self.request.GET.get('month'))
         if parsed is None:
             return {}
         year, month = parsed
-        return {'period_start': date(year, month, 1), 'current_month': f'{year:04d}-{month:02d}'}
+        return {
+            'period_start': date(year, month, 1),
+            'current_month': f'{year:04d}-{month:02d}',
+        }
+
+
+class MonthlyControlView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
+    """Monthly control per client/dog (PRD RF-011 — Sprint 9).
+
+    Shows, for a ``?month=YYYY-MM`` (defaults to the current month):
+    contratados/previstos/realizados/cancelados/não realizados/restantes
+    per dog, grouped by client (visão por cliente e por cachorro), with
+    optional ``?client=``/``?dog=`` scope filters.
+    """
+
+    permission_required = 'walks.view_walk'
+    template_name = 'walks/monthly_control.html'
+
+    def current_month(self):
+        parsed = parse_month(self.request.GET.get('month'))
+        if parsed is None:
+            today = timezone.localdate()
+            parsed = (today.year, today.month)
+        return parsed
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        year, month = self.current_month()
+        start, end = month_bounds(year, month)
+
+        client = Client.objects.filter(
+            pk=_valid_int(self.request.GET.get('client'))
+        ).first()
+        dog = Dog.objects.filter(pk=_valid_int(self.request.GET.get('dog'))).first()
+
+        rows, totals = monthly_control(start, end, client=client, dog=dog)
+
+        # Visão por cliente: rows come sorted by client name (services),
+        # so groupby yields one group per client with its subtotals.
+        client_groups = group_monthly_control_by_client(rows)
+
+        params = {
+            key: value
+            for key, value in (
+                ('client', client.pk if client else None),
+                ('dog', dog.pk if dog else None),
+            )
+            if value
+        }
+
+        def month_url(target_month):
+            base = dict(params)
+            base['month'] = target_month
+            url = reverse('walks:control')
+            return f'{url}?{urlencode(base)}'
+
+        prev_year, prev_month = shift_month(year, month, delta=-1)
+        next_year, next_month = shift_month(year, month, delta=1)
+        context.update(
+            {
+                'period_start': start,
+                'period_end': end,
+                'current_month': f'{year:04d}-{month:02d}',
+                'current_client_id': client.pk if client else 0,
+                'current_dog_id': dog.pk if dog else 0,
+                'clients': Client.objects.order_by('name'),
+                'dogs': self.get_dog_choices(client),
+                'client_groups': client_groups,
+                'totals': totals,
+                'nav': {
+                    'prev': month_url(f'{prev_year:04d}-{prev_month:02d}'),
+                    'next': month_url(f'{next_year:04d}-{next_month:02d}'),
+                },
+            }
+        )
+        return context
+
+    def get_dog_choices(self, client):
+        queryset = Dog.objects.select_related('client').order_by(
+            'client__name', 'name'
+        )
+        if client:
+            queryset = queryset.filter(client=client)
+        return queryset
 
 
 # --- status actions (RF-007/RF-008) ---------------------------------------
@@ -368,3 +439,42 @@ def walk_miss(request, pk):
             'confirm_class': 'btn-warning',
         },
     )
+
+
+# --- background dispatch (PRD RNF-004 — Sprint 11) --------------------------
+
+
+def _is_ajax(request):
+    return request.headers.get('x-requested-with') == 'XMLHttpRequest'
+
+
+@require_POST
+@login_required
+@permission_required('walks.add_walk', raise_exception=True)
+def walk_generate(request):
+    """Dispatch the walk generation task (RF-005/RNF-004 — Sprint 11).
+
+    Dispatching returns immediately — the Celery worker runs the
+    generation in the background (with ``CELERY_TASK_ALWAYS_EAGER`` and no
+    broker the task runs synchronously; the interface feedback flow is the
+    same). The requester receives a notification when the task completes
+    (RNF-004).
+    """
+    try:
+        generate_walks_task.delay(user_id=request.user.pk)
+    except Exception:
+        logger.exception('walk generation dispatch failed')
+        detail = 'Não foi possível iniciar a geração de passeios.'
+        if _is_ajax(request):
+            return JsonResponse({'ok': False, 'error': detail}, status=503)
+        messages.error(request, detail)
+        return _redirect_back(request)
+
+    detail = (
+        'Geração de passeios iniciada em segundo plano. '
+        'Você receberá uma notificação ao concluir.'
+    )
+    if _is_ajax(request):
+        return JsonResponse({'ok': True, 'detail': detail})
+    messages.success(request, detail)
+    return _redirect_back(request)

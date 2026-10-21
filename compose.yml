@@ -9,9 +9,14 @@ services:
     build: .
     env_file: .env
     environment:
-      # Dentro da rede do Compose o host do banco é o nome do serviço.
+      # Dentro da rede do Compose o host dos serviços é o nome do serviço.
       # Sobrescreve o DATABASE_URL do .env (que aponta para localhost).
       DATABASE_URL: postgres://scsi:scsi@postgres:5432/scsi
+      # Broker (RabbitMQ) e cache/result backend (Redis) do Celery —
+      # PRD seções 7/18 (Sprint 11). Sem broker as tasks rodariam de
+      # forma síncrona (CELERY_TASK_ALWAYS_EAGER), aqui o fluxo é real.
+      CELERY_BROKER_URL: amqp://scsi:scsi@rabbitmq:5672//
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -84,6 +89,57 @@ services:
       retries: 5
       # PRD 16: start_period generoso para evitar falsos negativos.
       start_period: 30s
+    restart: unless-stopped
+
+  # PRD 17/18 (Sprint 11): worker e beat aguardam o banco mas NÃO executam
+  # migrations nem collectstatic (isso pertence ao entrypoint do serviço web)
+  # — por isso usam scripts/celery_entrypoint.py, não scripts/entrypoint.py.
+  celery-worker:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://scsi:scsi@postgres:5432/scsi
+      CELERY_BROKER_URL: amqp://scsi:scsi@rabbitmq:5672//
+      REDIS_URL: redis://redis:6379/0
+    entrypoint: ["python", "scripts/celery_entrypoint.py"]
+    command: ["celery", "-A", "core", "worker", "--loglevel=info"]
+    volumes:
+      # Código montado igual ao serviço web (dev).
+      - .:/app
+      - scsi_media:/app/media
+      - scsi_staticfiles:/app/staticfiles
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-beat:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://scsi:scsi@postgres:5432/scsi
+      CELERY_BROKER_URL: amqp://scsi:scsi@rabbitmq:5672//
+      REDIS_URL: redis://redis:6379/0
+    entrypoint: ["python", "scripts/celery_entrypoint.py"]
+    # Agendamento em /tmp: o scheduler padrão persiste um arquivo — em dev
+    # ele é dispensável (a task diária é idempotente e reexecução após
+    # restart é inofensiva); evita poluir o diretório montado do projeto.
+    command: ["celery", "-A", "core", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+    volumes:
+      - .:/app
+      - scsi_media:/app/media
+      - scsi_staticfiles:/app/staticfiles
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

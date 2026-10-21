@@ -20,6 +20,9 @@ class LoginViewTests(TestCase):
         cls.user = User.objects.create_user(
             username='marina', password='senha-bem-secreta'
         )
+        # Home is the dashboard (Sprint 10), which requires the view_*
+        # permissions — the reader group has them.
+        cls.user.groups.add(Group.objects.get(name='Leitura'))
 
     def test_login_page_renders_for_anonymous(self):
         response = self.client.get(reverse('login'))
@@ -35,7 +38,7 @@ class LoginViewTests(TestCase):
         response = self.client.post(
             reverse('login'), {'username': 'marina', 'password': 'senha-bem-secreta'}
         )
-        self.assertRedirects(response, reverse('home'), target_status_code=302)
+        self.assertRedirects(response, reverse('home'), target_status_code=200)
         self.assertIn('_auth_user_id', self.client.session)
 
     def test_invalid_login_shows_error_and_no_session(self):
@@ -66,12 +69,29 @@ class RouteProtectionTests(TestCase):
             fetch_redirect_response=False,
         )
 
-    def test_home_redirects_to_clients_list(self):
+    def test_home_is_the_dashboard(self):
+        # Sprint 10 (RF-010): the dashboard is the application home.
+        user = User.objects.create_user(username='marina', password='senha-bem-secreta')
+        user.groups.add(Group.objects.get(name='Leitura'))
+        self.client.login(username='marina', password='senha-bem-secreta')
+        response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Dashboard')
+
+    def test_home_redirects_anonymous_to_login(self):
+        response = self.client.get(reverse('home'))
+        self.assertRedirects(
+            response,
+            f"{reverse('login')}?next={reverse('home')}",
+            fetch_redirect_response=False,
+        )
+
+    def test_home_requires_view_permissions(self):
+        # Users without the view_* permissions get 403 (backend check).
         User.objects.create_user(username='marina', password='senha-bem-secreta')
         self.client.login(username='marina', password='senha-bem-secreta')
-        response = self.client.get(reverse('home'), follow=True)
-        # Followed to the clients list (403 only if the user has no perms).
-        self.assertNotEqual(response.status_code, 302)
+        response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 403)
 
 
 class AuthorizationGroupsTests(TestCase):

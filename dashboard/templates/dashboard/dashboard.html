@@ -1,0 +1,331 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Dashboard — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item">Início</li>
+    <li class="breadcrumb-item">Dashboard</li>
+</ul>
+{% endblock %}
+
+{% block page_actions %}
+<form method="get" action="{% url 'home' %}" class="d-flex align-items-center gap-2 flex-wrap" role="search">
+    <input type="month" name="month" value="{{ current_month }}" class="form-control form-control-sm" aria-label="Mês">
+    <select name="client" class="form-select form-select-sm" aria-label="Cliente">
+        <option value="">Cliente: todos</option>
+        {% for client in clients %}
+        <option value="{{ client.pk }}" {% if client.pk == current_client_id %}selected{% endif %}>{{ client.name }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sm btn-light-brand">
+        <i class="feather-filter me-2"></i><span>Filtrar</span>
+    </button>
+</form>
+{% endblock %}
+
+{% block content %}
+<!-- KPI row (design system: dashboard cards pattern) -->
+<div class="row g-4 mb-4">
+    <div class="col-xxl-3 col-md-6">
+        <div class="card stretch stretch-full">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-4">
+                    <div class="d-flex gap-4 align-items-center">
+                        <div class="avatar-text avatar-lg bg-gray-200"><i class="feather-users"></i></div>
+                        <div>
+                            <div class="fs-4 fw-bold text-dark"><span class="counter">{{ clients_active }}</span>/<span class="counter">{{ clients_total }}</span></div>
+                            <h3 class="fs-13 fw-semibold text-truncate-1-line">Clientes ativos</h3>
+                        </div>
+                    </div>
+                    <a href="{% url 'clients:list' %}" data-bs-toggle="tooltip" title="Listar clientes"><i class="feather-more-vertical"></i></a>
+                </div>
+                <div class="pt-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="fs-12 fw-medium text-muted text-truncate-1-line">Inativos: {{ clients_inactive }}</span>
+                        <div class="w-100 text-end">
+                            <span class="fs-12 text-dark">{{ clients_active }}</span>
+                            <span class="fs-11 text-muted">({{ clients_progress }}%)</span>
+                        </div>
+                    </div>
+                    <div class="progress mt-2 ht-3">
+                        <div class="progress-bar bg-primary" role="progressbar" style="width: {{ clients_progress }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xxl-3 col-md-6">
+        <div class="card stretch stretch-full">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-4">
+                    <div class="d-flex gap-4 align-items-center">
+                        <div class="avatar-text avatar-lg bg-gray-200"><i class="feather-heart"></i></div>
+                        <div>
+                            <div class="fs-4 fw-bold text-dark"><span class="counter">{{ dogs_active }}</span>/<span class="counter">{{ dogs_total }}</span></div>
+                            <h3 class="fs-13 fw-semibold text-truncate-1-line">Cachorros ativos</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="pt-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="fs-12 fw-medium text-muted text-truncate-1-line">Inativos: {{ dogs_inactive }}</span>
+                        <div class="w-100 text-end">
+                            <span class="fs-12 text-dark">{{ dogs_active }}</span>
+                            <span class="fs-11 text-muted">({{ dogs_progress }}%)</span>
+                        </div>
+                    </div>
+                    <div class="progress mt-2 ht-3">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ dogs_progress }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xxl-3 col-md-6">
+        <div class="card stretch stretch-full">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-4">
+                    <div class="d-flex gap-4 align-items-center">
+                        <div class="avatar-text avatar-lg bg-gray-200"><i class="feather-calendar"></i></div>
+                        <div>
+                            <div class="fs-4 fw-bold text-dark"><span class="counter">{{ today_stats.completed }}</span>/<span class="counter">{{ today_stats.total }}</span></div>
+                            <h3 class="fs-13 fw-semibold text-truncate-1-line">Passeios de hoje</h3>
+                        </div>
+                    </div>
+                    <a href="{% url 'walks:day' %}" data-bs-toggle="tooltip" title="Ver o dia"><i class="feather-more-vertical"></i></a>
+                </div>
+                <div class="pt-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="fs-12 fw-medium text-muted text-truncate-1-line">Pendentes hoje: {{ today_remaining }}</span>
+                        <div class="w-100 text-end">
+                            <span class="fs-12 text-dark">{{ today_stats.completed }}</span>
+                            <span class="fs-11 text-muted">({{ today_progress }}%)</span>
+                        </div>
+                    </div>
+                    <div class="progress mt-2 ht-3">
+                        <div class="progress-bar bg-warning" role="progressbar" style="width: {{ today_progress }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xxl-3 col-md-6">
+        <div class="card stretch stretch-full">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-4">
+                    <div class="d-flex gap-4 align-items-center">
+                        <div class="avatar-text avatar-lg bg-gray-200"><i class="feather-check-circle"></i></div>
+                        <div>
+                            <div class="fs-4 fw-bold text-dark"><span class="counter">{{ month_totals.completed }}</span>/<span class="counter">{{ month_totals.contracted }}</span></div>
+                            <h3 class="fs-13 fw-semibold text-truncate-1-line">Realizados no mês</h3>
+                        </div>
+                    </div>
+                    <a href="{% url 'walks:control' %}" data-bs-toggle="tooltip" title="Controle mensal"><i class="feather-more-vertical"></i></a>
+                </div>
+                <div class="pt-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="fs-12 fw-medium text-muted text-truncate-1-line">Restantes no mês: {{ month_totals.remaining }}</span>
+                        <div class="w-100 text-end">
+                            <span class="fs-12 text-dark">{{ month_totals.completed }}</span>
+                            <span class="fs-11 text-muted">({{ month_totals.progress }}%)</span>
+                        </div>
+                    </div>
+                    <div class="progress mt-2 ht-3">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ month_totals.progress }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Today's walks (visão de passeios) + month control (visão mensal) -->
+<div class="row g-4 mb-4">
+    <div class="col-xxl-8 col-md-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Passeios de hoje — {{ today|date:'D, d/m/Y' }}</h5>
+                <div class="card-header-action ms-auto">
+                    <a href="{% url 'walks:day' %}{% if current_client_id %}?client={{ current_client_id }}{% endif %}" class="fs-12 fw-semibold text-primary">
+                        <i class="feather-external-link me-2"></i><span>Ver o dia</span>
+                    </a>
+                </div>
+            </div>
+            <div class="card-body custom-card-action p-0">
+                {% if today_walks %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="border-b">
+                                <th>Cachorro</th>
+                                <th>Status</th>
+                                <th>Status alterado em</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for walk in today_walks %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'dogs:detail' walk.dog.client.pk walk.dog.pk %}">
+                                        <span class="d-block">{{ walk.dog.name }}</span>
+                                        <span class="fs-12 d-block fw-normal text-muted">{{ walk.dog.client.name }}</span>
+                                    </a>
+                                </td>
+                                <td>{% include 'walks/_status_badge.html' %}</td>
+                                <td class="fs-12 text-muted">{% if walk.status_changed_at %}{{ walk.status_changed_at|date:'d/m/Y H:i' }}{% else %}—{% endif %}</td>
+                                <td class="text-end">
+                                    {% if perms.walks.change_walk and walk.status == 'scheduled' %}
+                                    <form method="post" action="{% url 'walks:complete' walk.pk %}" class="mb-0">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="btn btn-sm btn-success" data-bs-toggle="tooltip" title="Marcar como realizado">
+                                            <i class="feather-check"></i>
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <a href="{% url 'walks:day' %}?date={{ today|date:'Y-m-d' }}{% if current_client_id %}&client={{ current_client_id }}{% endif %}" data-bs-toggle="tooltip" title="Ver no dia"><i class="feather-external-link"></i></a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-5">
+                    <i class="feather-calendar fs-1 d-block mb-3"></i>
+                    <p class="text-muted mb-0">Nenhum passeio previsto para hoje{% if current_client_id %} para o cliente selecionado{% endif %}.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-xxl-4 col-md-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Controle do mês — {{ period_start|date:'F Y'|capfirst }}</h5>
+            </div>
+            <div class="card-body">
+                <!-- Design system: metrics / KPIs footer stats pattern -->
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Contratados</div>
+                            <h6 class="fw-bold text-dark mb-0"><span class="counter">{{ month_totals.contracted }}</span></h6>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Previstos</div>
+                            <h6 class="fw-bold text-dark mb-0"><span class="counter">{{ month_totals.scheduled }}</span></h6>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Realizados</div>
+                            <h6 class="fw-bold text-dark mb-0"><span class="counter">{{ month_totals.completed }}</span></h6>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Cancelados</div>
+                            <h6 class="fw-bold text-dark mb-0"><span class="counter">{{ month_totals.cancelled }}</span></h6>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Não realizados</div>
+                            <h6 class="fw-bold text-dark mb-0"><span class="counter">{{ month_totals.missed }}</span></h6>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Restantes</div>
+                            <h6 class="fw-bold text-dark mb-0"><span class="counter">{{ month_totals.remaining }}</span></h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer text-center">
+                <a href="{% url 'walks:control' %}?month={{ current_month }}{% if current_client_id %}&client={{ current_client_id }}{% endif %}" class="btn btn-light-brand btn-sm">
+                    <i class="feather-bar-chart-2 me-2"></i><span>Ver controle mensal</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Per-client month summary (informações por cliente/cachorro) -->
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Resumo do mês por cliente — {{ period_start|date:'F Y'|capfirst }}</h5>
+            </div>
+            <div class="card-body custom-card-action p-0">
+                {% if client_groups %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="border-b">
+                                <th>Cliente</th>
+                                <th class="text-center">Contratados</th>
+                                <th class="text-center">Previstos</th>
+                                <th class="text-center">Realizados</th>
+                                <th class="text-center">Cancelados</th>
+                                <th class="text-center">Não realizados</th>
+                                <th class="text-center">Restantes</th>
+                                <th style="min-width: 160px;">Realização do contrato</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for group in client_groups %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'clients:detail' group.client.pk %}">
+                                        <span class="d-block">{{ group.client.name }}</span>
+                                        {% if not group.client.is_active %}
+                                        <span class="fs-12 d-block fw-normal text-muted">cliente desativado</span>
+                                        {% endif %}
+                                    </a>
+                                </td>
+                                <td class="text-center fw-semibold">{{ group.totals.contracted }}</td>
+                                <td class="text-center"><span class="badge bg-soft-primary text-primary">{{ group.totals.scheduled }}</span></td>
+                                <td class="text-center"><span class="badge bg-soft-success text-success">{{ group.totals.completed }}</span></td>
+                                <td class="text-center"><span class="badge bg-soft-danger text-danger">{{ group.totals.cancelled }}</span></td>
+                                <td class="text-center"><span class="badge bg-soft-warning text-warning">{{ group.totals.missed }}</span></td>
+                                <td class="text-center fw-bold text-dark">{{ group.totals.remaining }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="progress w-100 ht-3">
+                                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ group.totals.progress }}%"></div>
+                                        </div>
+                                        <span class="fs-11 text-muted text-nowrap">{{ group.totals.progress }}%</span>
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex align-items-center justify-content-end gap-3">
+                                        <a href="{% url 'walks:control' %}?month={{ current_month }}&client={{ group.client.pk }}" data-bs-toggle="tooltip" title="Controle mensal do cliente"><i class="feather-bar-chart-2"></i></a>
+                                        <a href="{% url 'walks:month' %}?month={{ current_month }}&client={{ group.client.pk }}" data-bs-toggle="tooltip" title="Passeios do mês do cliente"><i class="feather-calendar"></i></a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-5">
+                    <i class="feather-bar-chart-2 fs-1 d-block mb-3"></i>
+                    <p class="text-muted mb-0">Nenhum passeio ou programação para {{ period_start|date:'F Y'|capfirst }}.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

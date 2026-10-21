@@ -1,0 +1,215 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Controle mensal — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}Controle mensal{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'walks:index' %}">Passeios</a></li>
+    <li class="breadcrumb-item">Controle mensal</li>
+</ul>
+{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group" role="group" aria-label="Visões">
+    <a href="{% url 'walks:day' %}" class="btn btn-sm btn-light-brand">Dia</a>
+    <a href="{% url 'walks:week' %}" class="btn btn-sm btn-light-brand">Semana</a>
+    <a href="{% url 'walks:month' %}" class="btn btn-sm btn-light-brand">Mês</a>
+    <a href="{% url 'walks:history' %}" class="btn btn-sm btn-light-brand">Histórico</a>
+    <a href="{% url 'walks:control' %}" class="btn btn-sm btn-primary">Controle</a>
+</div>
+<form method="get" action="{% url 'walks:control' %}" class="d-flex align-items-center gap-2 flex-wrap" role="search">
+    <input type="month" name="month" value="{{ current_month }}" class="form-control form-control-sm" aria-label="Mês">
+    <select name="client" class="form-select form-select-sm" aria-label="Cliente">
+        <option value="">Cliente: todos</option>
+        {% for client in clients %}
+        <option value="{{ client.pk }}" {% if client.pk == current_client_id %}selected{% endif %}>{{ client.name }}</option>
+        {% endfor %}
+    </select>
+    <select name="dog" class="form-select form-select-sm" aria-label="Cachorro">
+        <option value="">Cachorro: todos</option>
+        {% for dog in dogs %}
+        <option value="{{ dog.pk }}" {% if dog.pk == current_dog_id %}selected{% endif %}>{{ dog.name }} — {{ dog.client.name }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sm btn-light-brand">
+        <i class="feather-filter me-2"></i><span>Filtrar</span>
+    </button>
+</form>
+{% endblock %}
+
+{% block content %}
+<!-- Overall month totals (design system: Metrics/KPIs footer stats pattern) -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-4 col-xxl-2">
+        <div class="p-3 border border-dashed rounded">
+            <div class="fs-12 text-muted mb-1">Contratados</div>
+            <h6 class="fw-bold text-dark"><span class="counter">{{ totals.contracted }}</span></h6>
+            <div class="progress mt-2 ht-3">
+                <div class="progress-bar bg-primary" role="progressbar" style="width: 100%"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xxl-2">
+        <div class="p-3 border border-dashed rounded">
+            <div class="fs-12 text-muted mb-1">Previstos</div>
+            <h6 class="fw-bold text-dark"><span class="counter">{{ totals.scheduled }}</span></h6>
+            <div class="progress mt-2 ht-3">
+                <div class="progress-bar bg-info" role="progressbar" style="width: 100%"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xxl-2">
+        <div class="p-3 border border-dashed rounded">
+            <div class="fs-12 text-muted mb-1">Realizados</div>
+            <h6 class="fw-bold text-dark"><span class="counter">{{ totals.completed }}</span></h6>
+            <div class="progress mt-2 ht-3">
+                <div class="progress-bar bg-success" role="progressbar" style="width: {{ totals.progress }}%"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xxl-2">
+        <div class="p-3 border border-dashed rounded">
+            <div class="fs-12 text-muted mb-1">Cancelados</div>
+            <h6 class="fw-bold text-dark"><span class="counter">{{ totals.cancelled }}</span></h6>
+            <div class="progress mt-2 ht-3">
+                <div class="progress-bar bg-danger" role="progressbar" style="width: 100%"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xxl-2">
+        <div class="p-3 border border-dashed rounded">
+            <div class="fs-12 text-muted mb-1">Não realizados</div>
+            <h6 class="fw-bold text-dark"><span class="counter">{{ totals.missed }}</span></h6>
+            <div class="progress mt-2 ht-3">
+                <div class="progress-bar bg-warning" role="progressbar" style="width: 100%"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xxl-2">
+        <div class="p-3 border border-dashed rounded">
+            <div class="fs-12 text-muted mb-1">Restantes</div>
+            <h6 class="fw-bold text-dark"><span class="counter">{{ totals.remaining }}</span></h6>
+            <div class="progress mt-2 ht-3">
+                <div class="progress-bar bg-dark" role="progressbar" style="width: 100%"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if client_groups %}
+{% for group in client_groups %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center flex-wrap gap-2">
+                <h5 class="card-title mb-0">
+                    <a href="{% url 'clients:detail' group.client.pk %}" class="text-dark">{{ group.client.name }}</a>
+                    {% if group.client.is_active %}
+                    <span class="badge bg-soft-success text-success ms-2">Ativo</span>
+                    {% else %}
+                    <span class="badge bg-soft-danger text-danger ms-2">Desativado</span>
+                    {% endif %}
+                </h5>
+                <div class="card-header-action ms-auto d-flex align-items-center gap-2">
+                    <a href="{% url 'walks:month' %}?month={{ current_month }}&client={{ group.client.pk }}" class="btn btn-sm btn-light-brand" data-bs-toggle="tooltip" title="Passeios do mês deste cliente">
+                        <i class="feather-calendar me-1"></i><span>Passeios</span>
+                    </a>
+                </div>
+            </div>
+            <div class="card-body custom-card-action p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="border-b">
+                                <th>Cachorro</th>
+                                <th class="text-center">Contratados</th>
+                                <th class="text-center">Previstos</th>
+                                <th class="text-center">Realizados</th>
+                                <th class="text-center">Cancelados</th>
+                                <th class="text-center">Não realizados</th>
+                                <th class="text-center">Restantes</th>
+                                <th style="min-width: 160px;">Realização do contrato</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in group.rows %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'dogs:detail' row.client.pk row.dog.pk %}">
+                                        <span class="d-block">{{ row.dog.name }}</span>
+                                        {% if not row.dog.is_active %}
+                                        <span class="fs-12 d-block fw-normal text-muted">cachorro desativado</span>
+                                        {% endif %}
+                                    </a>
+                                </td>
+                                <td class="text-center fw-semibold">{{ row.contracted }}</td>
+                                <td class="text-center"><span class="badge bg-soft-primary text-primary">{{ row.scheduled }}</span></td>
+                                <td class="text-center"><span class="badge bg-soft-success text-success">{{ row.completed }}</span></td>
+                                <td class="text-center"><span class="badge bg-soft-danger text-danger">{{ row.cancelled }}</span></td>
+                                <td class="text-center"><span class="badge bg-soft-warning text-warning">{{ row.missed }}</span></td>
+                                <td class="text-center fw-bold text-dark">{{ row.remaining }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="progress w-100 ht-3">
+                                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ row.progress }}%"></div>
+                                        </div>
+                                        <span class="fs-11 text-muted text-nowrap">{{ row.progress }}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="border-t">
+                                <td class="fw-bold text-dark">Totais de {{ group.client.name }}</td>
+                                <td class="text-center fw-bold text-dark">{{ group.totals.contracted }}</td>
+                                <td class="text-center fw-bold text-dark">{{ group.totals.scheduled }}</td>
+                                <td class="text-center fw-bold text-dark">{{ group.totals.completed }}</td>
+                                <td class="text-center fw-bold text-dark">{{ group.totals.cancelled }}</td>
+                                <td class="text-center fw-bold text-dark">{{ group.totals.missed }}</td>
+                                <td class="text-center fw-bold text-dark">{{ group.totals.remaining }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="progress w-100 ht-3">
+                                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ group.totals.progress }}%"></div>
+                                        </div>
+                                        <span class="fs-11 text-muted text-nowrap">{{ group.totals.progress }}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="row">
+    <div class="col-12">
+        <div class="card stretch stretch-full">
+            <div class="card-body">
+                <div class="text-center p-5">
+                    <i class="feather-bar-chart-2 fs-1 d-block mb-3"></i>
+                    <p class="text-muted mb-0">Nenhum passeio ou programação para {{ period_start|date:'F Y'|capfirst }}.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Month navigation -->
+<div class="d-flex align-items-center justify-content-center gap-2">
+    <a href="{{ nav.prev }}" class="btn btn-light-brand btn-md" data-bs-toggle="tooltip" title="Mês anterior">
+        <i class="bi bi-arrow-left"></i>
+    </a>
+    <span class="fs-12 fw-semibold text-dark">{{ period_start|date:'F Y'|capfirst }}</span>
+    <a href="{{ nav.next }}" class="btn btn-light-brand btn-md" data-bs-toggle="tooltip" title="Próximo mês">
+        <i class="bi bi-arrow-right"></i>
+    </a>
+</div>
+{% endblock %}

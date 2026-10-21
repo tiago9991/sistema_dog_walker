@@ -1,0 +1,105 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Notificações — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}Notificações{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item">Notificações</li>
+</ul>
+{% endblock %}
+
+{% block page_actions %}
+{% if unread_count %}
+<form method="post" action="{% url 'notifications:mark_all_read' %}" class="mb-0">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <button type="submit" class="btn btn-light-brand btn-md">
+        <i class="feather-check me-2"></i><span>Marcar todas como lidas ({{ unread_count }})</span>
+    </button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Minhas notificações</h5>
+                <div class="card-header-action ms-auto">
+                    <span class="badge {% if unread_count %}bg-soft-danger text-danger{% else %}bg-gray-200 text-dark{% endif %}">{{ unread_count }} não lida(s)</span>
+                </div>
+            </div>
+            <div class="card-body custom-card-action p-0">
+                {% if notifications %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="border-b">
+                                <th>Notificação</th>
+                                <th>Nível</th>
+                                <th>Situação</th>
+                                <th>Recebida em</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for notification in notifications %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-3">
+                                        {% include 'notifications/_notification_icon.html' %}
+                                        <div class="{% if not notification.is_read %}fw-semibold{% else %}text-muted{% endif %}">
+                                            <span class="d-block text-truncate-1-line">{{ notification.title }}</span>
+                                            {% if notification.message %}
+                                            <span class="fs-12 d-block fw-normal text-muted text-truncate-2-line">{{ notification.message }}</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="fs-12">{{ notification.get_level_display }}</td>
+                                <td>
+                                    {% if notification.is_read %}
+                                    <span class="badge bg-gray-200 text-dark">Lida</span>
+                                    {% else %}
+                                    <span class="badge bg-soft-danger text-danger">Não lida</span>
+                                    {% endif %}
+                                </td>
+                                <td class="fs-12 text-muted">{{ notification.created_at|date:'d/m/Y H:i' }}</td>
+                                <td class="text-end">
+                                    <div class="d-flex align-items-center justify-content-end gap-3">
+                                        {% if notification.link %}
+                                        <a href="{{ notification.link }}" data-bs-toggle="tooltip" title="Abrir detalhes"><i class="feather-external-link"></i></a>
+                                        {% endif %}
+                                        {% if not notification.is_read %}
+                                        <form method="post" action="{% url 'notifications:mark_read' notification.pk %}" class="mb-0">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <button type="submit" class="btn btn-link p-0 text-success" data-bs-toggle="tooltip" title="Marcar como lida"><i class="feather-check"></i></button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-5">
+                    <i class="feather-bell fs-1 d-block mb-3"></i>
+                    <p class="text-muted mb-0">Nenhuma notificação.</p>
+                </div>
+                {% endif %}
+            </div>
+            {% if page_obj.has_other_pages %}
+            <div class="card-footer">
+                {% include 'base/_pagination.html' %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

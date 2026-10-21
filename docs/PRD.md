@@ -403,6 +403,30 @@ Indicadores mínimos:
 
 A implementação deve priorizar informações úteis para tomada de decisão operacional.
 
+### Indicadores implementados (Sprint 10)
+
+O dashboard é a página inicial da aplicação (`/`, nome de URL `home`;
+login redireciona para ele). Indicadores:
+
+- **clientes**: ativos/total (com barra de progresso e contagem de
+  inativos);
+- **cachorros**: ativos/total (idem);
+- **passeios de hoje**: realizados/total do dia, pendentes
+  (`previsto`), com lista dos passeios do dia (visão de passeios) e ação
+  rápida de "realizar" para operadores;
+- **visão mensal**: os seis contadores de RF-011 do mês
+  (`?month=YYYY-MM`, padrão o mês corrente), com resumo por cliente
+  (contratados/previstos/realizados/cancelados/não realizados/restantes +
+  progresso) e link para o controle mensal completo.
+
+Filtros relevantes: mês e cliente (escopam a visão mensal e a lista do
+dia). Consultas: todas as contagens via agregações (`aggregate`/`annotate`
+— sem queries por linha); os contadores mensais reutilizam
+`walks.services.monthly_control` (Sprint 9). Interface 100% com o design
+system (cards KPI, tabelas `table-responsive`, mini-métricas) e
+responsividade herdada da grade do design system (`col-xxl-3 col-md-6`,
+`col-6`, `table-responsive` — RNF-001).
+
 ---
 
 ## RF-011 — Controle mensal
@@ -421,6 +445,38 @@ O sistema deve apresentar, por cliente/cachorro:
 A definição exata de "restante" deve ser baseada na regra de negócio aprovada para o status de cada passeio.
 
 Não assumir que cancelamento sempre reduz ou sempre mantém o saldo contratado.
+
+### Regras de cálculo implementadas (Sprint 9 — decisão 7 da seção 53 resolvida)
+
+Por cliente/cachorro, para um mês calendário (`?month=YYYY-MM`, padrão o
+mês corrente, timezone `America/Sao_Paulo`):
+
+| Contador | Regra |
+|---|---|
+| `contratados` | datas do mês cobertas por programações **ativas** do cachorro (dia da semana dentro do período) — determinístico a partir de RF-004, independente da janela de geração (meses futuros também possuem contrato) |
+| `previstos` | passeios existentes no mês com status `previsto` |
+| `realizados` | passeios existentes no mês com status `realizado` |
+| `cancelados` | passeios existentes no mês com status `cancelado` |
+| `não realizados` | passeios existentes no mês com status `não realizado` |
+| `restantes` | `contratados − realizados − cancelados − não realizados`, nunca negativo |
+
+Regra por status (saldo **operacional**; o impacto **financeiro** de
+cancelamento permanece decisão aberta na seção 53):
+
+- `realizado`, `não realizado` e `cancelado` **consomem** o contrato do mês
+  (não serão executados);
+- `previsto` segue pendente;
+- datas contratadas ainda sem passeio gerado (fora da janela de geração)
+  permanecem no saldo — "restantes" responde "quanto falta executar no mês
+  para cumprir o contrato vigente";
+- quando o contrato vigente encolhe (ex.: programação desativada após
+  execuções), `restantes` é limitado a zero — os desfechos registrados
+  permanecem visíveis nas contagens de status.
+
+Visões: `/walks/controle/` agrupada por cliente com subtotais e uma linha
+por cachorro (visão por cliente e por cachorro), filtros por
+cliente/cachorro/mês, totais gerais do mês e progresso de realização do
+contrato; acessível a partir do detalhe do cliente e do cachorro.
 
 ---
 
@@ -713,6 +769,26 @@ Máquina de estados e regras de geração: ver RF-005/RF-006.
 
 Representa notificações para o usuário quando necessário.
 
+Modelo definitivo (definido na Sprint 11 — decisão 13 da seção 53
+resolvida): **in-app**, por usuário (sem e-mail/push no MVP), criada por
+tasks de background ao concluírem (RNF-004).
+
+| Campo | Tipo | Observação |
+|---|---|---|
+| `recipient` | `ForeignKey(User, CASCADE)` | `related_name="notifications"`; dado pessoal — some com o usuário |
+| `level` | `CharField(20)` com choices | info/sucesso/atenção/erro (padrão: info) |
+| `title` | `CharField(150)` | obrigatório |
+| `message` | `TextField` | opcional |
+| `link` | `CharField(200)` | caminho interno opcional (ex.: `/walks/dia/`); criado por tasks |
+| `is_read` | `BooleanField` | leitura por destinatário |
+| `read_at` | `DateTimeField` | preenchida ao ler |
+
+Campos técnicos: `created_at`/`updated_at` (herdados de `BaseModel`).
+Índices `(recipient, -created_at)` e `(recipient, is_read)`. Exposição na
+interface: sino no cabeçalho (badge + últimas 5), toasts via polling
+(`static/js/scsi.js` → `/notifications/poll/`) e página `/notifications/`.
+Notificações são pessoais: todo queryset filtrado por `request.user`.
+
 ### AI Task / AI Analysis
 
 A persistência definitiva de resultados de IA deve ser definida quando os casos de uso de IA forem implementados.
@@ -978,6 +1054,27 @@ Redis.
 ## Painel
 
 Utilizar `dj-celery-panel` no Django Admin.
+
+### Implementação (Sprint 11)
+
+- App Celery em `core/celery.py` (`celery_app`), tasks em `<app>.tasks`
+  (autodiscover); configuração pelo namespace `CELERY_` das settings.
+- Worker e Beat rodam como serviços do Compose
+  (`celery-worker`/`celery-beat`) via `scripts/celery_entrypoint.py`
+  (aguardam o banco; **sem** migrations/collectstatic — PRD 17).
+- Result backend: a própria URL Redis (`REDIS_URL`) — `django-cache` foi
+  evitado (exigiria `django-celery-results` apenas para reusar o cache).
+- Sem `CELERY_BROKER_URL` (quick runs sem RabbitMQ) as tasks rodam de
+  forma síncrona (`CELERY_TASK_ALWAYS_EAGER`) — Compose/produção sempre
+  definem o broker (fluxo assíncrono real).
+- RabbitMQ ≥ 4.4 removeu filas transitórias **não-exclusivas**; filas de
+  controle/eventos do Celery 5.6 declaradas como **exclusivas**
+  (`CELERY_CONTROL_QUEUE_EXCLUSIVE`/`CELERY_EVENT_QUEUE_EXCLUSIVE`).
+- Beat: `generate-walks-daily` — todo dia 03:00 `America/Sao_Paulo`
+  (idempotente, RF-005).
+- Painel: `dj-celery-panel` + `dj_control_room_base` em `/admin/`
+  (`/admin/dj-celery-panel/`, restrito a staff; sem tabelas/migrations).
+- Detalhes operacionais e pitfalls: [docs/celery.md](./celery.md).
 
 ---
 
@@ -1308,42 +1405,42 @@ Cada tarefa deve:
 
 ## Sprint 9 — Controle mensal
 
-- [ ] Definir regra de cálculo.
-- [ ] Implementar passeios contratados.
-- [ ] Implementar previstos.
-- [ ] Implementar realizados.
-- [ ] Implementar cancelados.
-- [ ] Implementar não realizados.
-- [ ] Implementar restantes.
-- [ ] Criar visão por cliente.
-- [ ] Criar visão por cachorro.
-- [ ] Validar cálculos com dados fake.
+- [x] Definir regra de cálculo.
+- [x] Implementar passeios contratados.
+- [x] Implementar previstos.
+- [x] Implementar realizados.
+- [x] Implementar cancelados.
+- [x] Implementar não realizados.
+- [x] Implementar restantes.
+- [x] Criar visão por cliente.
+- [x] Criar visão por cachorro.
+- [x] Validar cálculos com dados fake.
 
 ## Sprint 10 — Dashboard
 
-- [ ] Definir indicadores.
-- [ ] Criar consultas agregadas.
-- [ ] Otimizar queries.
-- [ ] Criar cards.
-- [ ] Criar visão de passeios.
-- [ ] Criar visão mensal.
-- [ ] Criar filtros relevantes.
-- [ ] Aplicar design system.
-- [ ] Validar responsividade.
+- [x] Definir indicadores.
+- [x] Criar consultas agregadas.
+- [x] Otimizar queries.
+- [x] Criar cards.
+- [x] Criar visão de passeios.
+- [x] Criar visão mensal.
+- [x] Criar filtros relevantes.
+- [x] Aplicar design system.
+- [x] Validar responsividade.
 
 ## Sprint 11 — Notificações e background
 
-- [ ] Configurar Celery.
-- [ ] Configurar RabbitMQ.
-- [ ] Configurar Redis.
-- [ ] Configurar Worker.
-- [ ] Configurar Beat.
-- [ ] Configurar `dj-celery-panel`.
-- [ ] Criar modelo de notificação.
-- [ ] Criar feedback de loading.
-- [ ] Criar conclusão de task.
-- [ ] Criar notificação na interface.
-- [ ] Validar que requests não ficam bloqueados.
+- [x] Configurar Celery.
+- [x] Configurar RabbitMQ.
+- [x] Configurar Redis.
+- [x] Configurar Worker.
+- [x] Configurar Beat.
+- [x] Configurar `dj-celery-panel`.
+- [x] Criar modelo de notificação.
+- [x] Criar feedback de loading.
+- [x] Criar conclusão de task.
+- [x] Criar notificação na interface.
+- [x] Validar que requests não ficam bloqueados.
 
 ## Sprint 12 — IA
 
@@ -2534,13 +2631,13 @@ Os pontos abaixo devem ser decididos antes da implementação definitiva do dom�
 - [x] Estados definitivos de `Walk`.
 - [ ] Regras de cancelamento.
 - [ ] Regras financeiras de cancelamento.
-- [ ] Regra exata para "passeios restantes".
+- [x] Regra exata para "passeios restantes". — Sprint 9: `contratados − realizados − cancelados − não realizados` (nunca negativo; saldo operacional, sem impacto financeiro); ver RF-011.
 - [x] Modelo definitivo de recorrência.
 - [x] Janela de geração de passeios.
 - [x] Comportamento quando uma programação é alterada.
 - [ ] Regras de feriados.
 - [ ] Regras de remarcação.
-- [ ] Modelo de notificações.
+- [x] Modelo de notificações. — Sprint 11: in-app por usuário (nível/título/mensagem/link/lida); ver seção 9.1 e docs/celery.md.
 - [ ] Casos de uso de IA do MVP.
 - [ ] Política definitiva de armazenamento de media em ambiente multi-node.
 - [ ] Política de retenção de backups.

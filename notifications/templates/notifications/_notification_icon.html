@@ -1,0 +1,10 @@
+{# Notification icon by level (design system: soft icon containers). #}
+{% if notification.level == 'success' %}
+<div class="avatar-text avatar-sm bg-soft-success text-success"><i class="feather-check-circle"></i></div>
+{% elif notification.level == 'error' %}
+<div class="avatar-text avatar-sm bg-soft-danger text-danger"><i class="feather-alert-circle"></i></div>
+{% elif notification.level == 'warning' %}
+<div class="avatar-text avatar-sm bg-soft-warning text-warning"><i class="feather-alert-triangle"></i></div>
+{% else %}
+<div class="avatar-text avatar-sm bg-soft-info text-info"><i class="feather-bell"></i></div>
+{% endif %}

@@ -13,8 +13,10 @@ urlpatterns = [
     path('semana/', views.WalkWeekListView.as_view(), name='week'),
     path('mes/', views.WalkMonthListView.as_view(), name='month'),
     path('historico/', views.WalkHistoryListView.as_view(), name='history'),
+    path('controle/', views.MonthlyControlView.as_view(), name='control'),
     path('<int:pk>/realizado/', views.walk_complete, name='complete'),
     path('<int:pk>/cancelar/', views.walk_cancel, name='cancel'),
     path('<int:pk>/nao-realizado/', views.walk_miss, name='miss'),
     path('<int:pk>/reverter/', views.walk_revert, name='revert'),
+    path('gerar/', views.walk_generate, name='generate'),
 ]

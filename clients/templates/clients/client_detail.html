@@ -20,6 +20,11 @@
 
 {% block page_actions %}
 <div class="d-flex align-items-center gap-2">
+    {% if perms.walks.view_walk %}
+    <a href="{% url 'walks:control' %}?client={{ client.pk }}" class="btn btn-light-brand btn-md">
+        <i class="feather-bar-chart-2 me-2"></i><span>Controle mensal</span>
+    </a>
+    {% endif %}
     {% if perms.clients.change_client %}
     <a href="{% url 'clients:update' client.pk %}" class="btn btn-light-brand btn-md">
         <i class="feather-edit-3 me-2"></i><span>Editar</span>

@@ -19,6 +19,7 @@
     <a href="{% url 'walks:week' %}" class="btn btn-sm {% if mode == 'week' %}btn-primary{% else %}btn-light-brand{% endif %}">Semana</a>
     <a href="{% url 'walks:month' %}" class="btn btn-sm {% if mode == 'month' %}btn-primary{% else %}btn-light-brand{% endif %}">Mês</a>
     <a href="{% url 'walks:history' %}" class="btn btn-sm {% if mode == 'history' %}btn-primary{% else %}btn-light-brand{% endif %}">Histórico</a>
+    <a href="{% url 'walks:control' %}" class="btn btn-sm btn-light-brand">Controle</a>
 </div>
 <form method="get" action="{{ mode_url }}" class="d-flex align-items-center gap-2 flex-wrap" role="search">
     {% if mode == 'day' or mode == 'week' %}
@@ -48,6 +49,14 @@
         <i class="feather-filter me-2"></i><span>Filtrar</span>
     </button>
 </form>
+{% if perms.walks.add_walk %}
+<form method="post" action="{% url 'walks:generate' %}" class="mb-0" data-async-task>
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-primary" data-bs-toggle="tooltip" title="Gera os passeios previstos das programações ativas em segundo plano">
+        <i class="feather-zap me-1"></i><span>Gerar passeios</span>
+    </button>
+</form>
+{% endif %}
 {% endblock %}
 
 {% block content %}
