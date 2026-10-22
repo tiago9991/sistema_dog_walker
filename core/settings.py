@@ -55,6 +55,8 @@ INSTALLED_APPS = [
     'walks',
     'dashboard',
     'notifications',
+    'ai',
+    'reports',
 ]
 
 MIDDLEWARE = [
@@ -150,10 +152,12 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Design system assets served directly from the official reference
 # (design_system/refs/duralux — PRD section 20) plus the project's own
-# static assets (static/js — Sprint 11).
+# static assets. The project folder comes FIRST so same-named files
+# override the reference (brand logo/favicon in static/images — keeping
+# the design system reference itself untouched).
 STATICFILES_DIRS = [
-    BASE_DIR / 'design_system' / 'refs' / 'duralux',
     BASE_DIR / 'static',
+    BASE_DIR / 'design_system' / 'refs' / 'duralux',
 ]
 
 # Default primary key field type
@@ -215,3 +219,13 @@ CELERY_TIMEZONE = TIME_ZONE
 # keep the auto-delete/x-expires lifecycle, leaving no stale queues behind.
 CELERY_CONTROL_QUEUE_EXCLUSIVE = True
 CELERY_EVENT_QUEUE_EXCLUSIVE = True
+
+
+# AI (PRD sections 7, 19 and 38 — Sprint 12)
+# The key stays out of Git: .env locally (gitignored), production
+# environment/secrets (PRD sections 15/38). Without a key the AI features
+# report "not configured" — nothing else breaks (see ai/llm.py and
+# docs/ia.md). The model follows the stack definition (PRD section 7:
+# GPT-5.5-mini via OpenAI).
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+AI_MODEL = config('AI_MODEL', default='gpt-5.5-mini')

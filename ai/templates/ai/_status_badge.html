@@ -1,0 +1,7 @@
+{% if analysis.status == 'running' %}
+<span class="badge bg-soft-primary text-primary">Em execução</span>
+{% elif analysis.status == 'completed' %}
+<span class="badge bg-soft-success text-success">Concluída</span>
+{% elif analysis.status == 'failed' %}
+<span class="badge bg-soft-danger text-danger">Falhou</span>
+{% endif %}

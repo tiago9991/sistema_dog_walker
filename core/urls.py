@@ -24,4 +24,8 @@ urlpatterns = [
     ),
     path('walks/', include('walks.urls')),
     path('notifications/', include('notifications.urls')),
+    # IA (PRD section 19 — Sprint 12) and reports (PRD section 21 —
+    # Sprint 13).
+    path('ai/', include('ai.urls')),
+    path('reports/', include('reports.urls')),
 ]

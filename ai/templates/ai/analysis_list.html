@@ -1,0 +1,120 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Análises de IA — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}Análises de IA{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item">Análises de IA</li>
+</ul>
+{% endblock %}
+
+{% block content %}
+{% if not ai_configured %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-4" role="alert">
+    <i class="feather-alert-triangle"></i>
+    <span class="fs-12">IA não configurada — defina <code>OPENAI_API_KEY</code> no ambiente para habilitar as análises (veja a documentação em <code>docs/ia.md</code>).</span>
+</div>
+{% endif %}
+
+<!-- Nova análise (form) + histórico -->
+<div class="row g-4 mb-4">
+    <div class="col-xxl-4 col-md-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Nova análise</h5>
+            </div>
+            <div class="card-body">
+                <p class="fs-12 text-muted">
+                    O resumo operacional mensal analisa os contadores do mês (contratados, previstos, realizados,
+                    cancelados, não realizados e restantes) e as observações registradas, e gera destaques,
+                    pontos de atenção e recomendações para a operação.
+                </p>
+                {% if ai_configured %}
+                <form method="post" action="{% url 'ai:request' %}" data-async-task>
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label" for="id_month">Mês</label>
+                        <input type="month" name="month" value="{{ current_month }}" id="id_month" class="form-control" aria-describedby="month_help" required>
+                        <div class="fs-11 text-muted mt-1" id="month_help">Padrão: mês corrente.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="id_client">Cliente</label>
+                        <select name="client" id="id_client" class="form-select" aria-describedby="client_help">
+                            <option value="">Todos os clientes</option>
+                            {% for client in clients %}
+                            <option value="{{ client.pk }}" {% if client.pk == current_client_id %}selected{% endif %}>{{ client.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="fs-11 text-muted mt-1" id="client_help">Opcional — delimita a análise a um cliente.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" title="Executa a análise em segundo plano e notifica ao concluir">
+                        <i class="feather-cpu me-2"></i><span>Gerar análise</span>
+                    </button>
+                </form>
+                {% else %}
+                <p class="fs-12 text-muted mb-0">Configure <code>OPENAI_API_KEY</code> no ambiente para solicitar análises.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-xxl-8 col-md-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Histórico de análises</h5>
+            </div>
+            <div class="card-body custom-card-action p-0">
+                {% if analyses %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="border-b">
+                                <th>Tipo</th>
+                                <th>Período</th>
+                                <th>Cliente</th>
+                                <th>Status</th>
+                                <th>Solicitada por</th>
+                                <th>Solicitada em</th>
+                                <th class="text-end">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for analysis in analyses %}
+                            <tr>
+                                <td class="fs-12">{{ analysis.get_kind_display }}</td>
+                                <td class="fs-12">{{ analysis.period_display|capfirst|default:'—' }}</td>
+                                <td class="fs-12">
+                                    {% if analysis.client %}
+                                    <a href="{% url 'clients:detail' analysis.client.pk %}">{{ analysis.client.name }}</a>
+                                    {% else %}Todos os clientes{% endif %}
+                                </td>
+                                <td>{% include 'ai/_status_badge.html' %}</td>
+                                <td class="fs-12 text-muted">{{ analysis.requested_by.get_full_name|default:analysis.requested_by.username|default:'—' }}</td>
+                                <td class="fs-12 text-muted">{{ analysis.created_at|date:'d/m/Y H:i' }}</td>
+                                <td class="text-end">
+                                    <a href="{% url 'ai:detail' analysis.pk %}" class="btn btn-sm btn-light-brand" data-bs-toggle="tooltip" title="Ver análise">
+                                        <i class="feather-external-link me-1"></i><span>Ver</span>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-5">
+                    <i class="feather-cpu fs-1 d-block mb-3"></i>
+                    <p class="text-muted mb-0">Nenhuma análise solicitada ainda.</p>
+                </div>
+                {% endif %}
+            </div>
+            {% if page_obj.has_other_pages %}
+            <div class="card-footer">
+                {% include 'base/_pagination.html' %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

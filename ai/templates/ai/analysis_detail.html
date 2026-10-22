@@ -1,0 +1,107 @@
+{% extends 'base/base.html' %}
+
+{% block title %}{{ analysis.get_kind_display }} — Sistema de Gestão para Dog Walker Inteligente{% endblock %}
+{% block page_title %}{{ analysis.get_kind_display }}{% endblock %}
+
+{% block breadcrumbs %}
+<ul class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Início</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'ai:list' %}">Análises de IA</a></li>
+    <li class="breadcrumb-item">{{ analysis.get_kind_display }}</li>
+</ul>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'ai:list' %}" class="btn btn-sm btn-light-brand">
+    <i class="feather-arrow-left me-2"></i><span>Voltar</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center flex-wrap gap-2">
+                <h5 class="card-title mb-0">
+                    {{ analysis.get_kind_display }}{% if analysis.period_display %} — {{ analysis.period_display|capfirst }}{% endif %}
+                </h5>
+                <div class="card-header-action ms-auto d-flex align-items-center gap-2">
+                    {% include 'ai/_status_badge.html' %}
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Metadata (design system: metrics footer stats pattern) -->
+                <div class="row g-3 mb-4">
+                    <div class="col-6 col-md-4 col-xxl-2">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Período</div>
+                            <h6 class="fw-bold text-dark mb-0">{{ analysis.period_display|capfirst|default:'—' }}</h6>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xxl-2">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Cliente</div>
+                            <h6 class="fw-bold text-dark mb-0">
+                                {% if analysis.client %}<a class="text-dark" href="{% url 'clients:detail' analysis.client.pk %}">{{ analysis.client.name }}</a>
+                                {% else %}Todos os clientes{% endif %}
+                            </h6>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xxl-2">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Solicitada por</div>
+                            <h6 class="fw-bold text-dark mb-0">{{ analysis.requested_by.get_full_name|default:analysis.requested_by.username|default:'—' }}</h6>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xxl-2">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Solicitada em</div>
+                            <h6 class="fw-bold text-dark mb-0">{{ analysis.created_at|date:'d/m/Y H:i' }}</h6>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xxl-2">
+                        <div class="p-3 border border-dashed rounded">
+                            <div class="fs-12 text-muted mb-1">Concluída em</div>
+                            <h6 class="fw-bold text-dark mb-0">{{ analysis.completed_at|date:'d/m/Y H:i'|default:'—' }}</h6>
+                        </div>
+                    </div>
+                </div>
+
+                {% if analysis.status == 'completed' %}
+                <h6 class="fw-bold text-dark mb-3">Resultado</h6>
+                <div class="p-3 border border-dashed rounded fs-13">{{ analysis.result|linebreaksbr }}</div>
+                {% elif analysis.status == 'failed' %}
+                <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+                    <i class="feather-alert-circle"></i>
+                    <span class="fs-12">A análise falhou durante a execução em segundo plano. Detalhe do erro:</span>
+                </div>
+                <div class="p-3 border border-dashed rounded fs-12 text-muted">{{ analysis.error|linebreaksbr }}</div>
+                {% else %}
+                <div class="alert alert-info d-flex align-items-center gap-2" role="alert">
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span class="fs-12">Análise em execução em segundo plano — você receberá uma notificação ao concluir.</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if analysis.input_summary %}
+<div class="row">
+    <div class="col-12">
+        <div class="card stretch stretch-full">
+            <div class="card-header d-flex align-items-center">
+                <h5 class="card-title mb-0">Dados considerados</h5>
+                <div class="card-header-action ms-auto">
+                    <span class="badge bg-gray-200 text-dark">snapshot da execução</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <pre class="fs-12 text-muted mb-0" style="white-space: pre-wrap;">{{ analysis.input_summary }}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

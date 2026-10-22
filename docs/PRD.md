@@ -789,9 +789,28 @@ interface: sino no cabeçalho (badge + últimas 5), toasts via polling
 (`static/js/scsi.js` → `/notifications/poll/`) e página `/notifications/`.
 Notificações são pessoais: todo queryset filtrado por `request.user`.
 
-### AI Task / AI Analysis
+### AIAnalysis
 
-A persistência definitiva de resultados de IA deve ser definida quando os casos de uso de IA forem implementados.
+Persistência definitiva dos resultados de IA (definida na Sprint 12,
+quando o primeiro caso de uso foi implementado): um registro por
+execução, criado no dispatch (`running`) e atualizado pela task Celery
+com o resultado ou o motivo da falha.
+
+| Campo | Tipo | Observação |
+|---|---|---|
+| `kind` | `CharField(20)` com choices | tipo da análise (`monthly_summary` — extensível) |
+| `status` | `CharField(20)` com choices | `running`/`completed`/`failed` (padrão: `running`) |
+| `month` | `CharField(7)` | `YYYY-MM` (escopo mensal) |
+| `client` | `ForeignKey(Client, PROTECT)` opcional | escopo reproduzível |
+| `input_summary` | `TextField` | snapshot dos dados enviados ao modelo (auditoria) |
+| `result` | `TextField` | texto resultante |
+| `error` | `TextField` | motivo legível da falha |
+| `requested_by` | `ForeignKey(User, SET_NULL)` opcional | a análise sobrevive ao usuário (histórico) |
+| `completed_at` | `DateTimeField` | preenchida ao concluir (sucesso ou falha) |
+
+Campos técnicos: `created_at`/`updated_at` (herdados de `BaseModel`).
+Índices `(kind, -created_at)` e `(status, -created_at)`. Arquitetura de
+IA, prompt e fluxo assíncrono: [docs/ia.md](./ia.md).
 
 ---
 
@@ -1104,6 +1123,38 @@ Usar LangGraph quando existir:
 
 Processamentos de IA demorados devem ser executados via Celery.
 
+### Implementação (Sprint 12)
+
+- Stack em vigor: LangChain 1.4 + `langchain-openai` (OpenAI) com
+  `gpt-5.5-mini` (`OPENAI_API_KEY`/`AI_MODEL` — seções 38/15); LangGraph
+  1.2 instalado como caminho de escalação (ver abaixo).
+- **Primeiro caso de uso (decisão 15 da seção 53): resumo operacional
+  mensal** — a IA analisa os contadores de RF-011 (reusa
+  `walks.services.monthly_control` — a análise nunca diverge da página
+  de controle) e as observações do mês (RF-008/RF-013), por mês e
+  opcionalmente por cliente. Saída em seções Resumo/Destaques/Pontos de
+  atenção/Recomendações, com prompt especializado em pt-br (sem números
+  inventados; sem afirmações financeiras — regras financeiras seguem
+  abertas na seção 53).
+- Abstração inicial (`ai/llm.py`): ponto único de construção do modelo;
+  sem `OPENAI_API_KEY` as análises reportam "não configurada" e nada
+  mais quebra.
+- **LangGraph: nenhum workflow criado** — o resumo mensal é uma única
+  chamada ao LLM (princípio desta seção); os critérios de escalação
+  (estado, múltiplas etapas, decisão, branching, ferramentas, retries) e
+  como um grafo se pluga na mesma abstração estão documentados em
+  [docs/ia.md](./ia.md).
+- Execução: `ai.tasks.monthly_analysis_task` via Celery (o LLM nunca
+  roda no request), com persistência em `AIAnalysis` (seção 9.1) e
+  notificação de conclusão ao solicitante com link para o resultado
+  (RNF-004 — mesmo fluxo `data-async-task` da Sprint 11). Meses sem
+  dados retornam mensagem determinística sem chamar o LLM.
+- Interface: `/ai/` (histórico + formulário mês/cliente, registro
+  `Em execução`, detalhe com resultado e snapshot dos dados
+  considerados) e botão "Analisar com IA" no controle mensal (com os
+  filtros do mês/cliente).
+- Detalhes e pitfalls: [docs/ia.md](./ia.md).
+
 ---
 
 # 20. Design system
@@ -1137,6 +1188,26 @@ Utilizar:
 - PyPDF.
 
 Os relatórios devem ser gerados de maneira não bloqueante quando a geração puder ser demorada.
+
+### Implementação (Sprint 13)
+
+- Primeiro relatório: **controle mensal em PDF**
+  (`/reports/controle-mensal/` — mesmos contadores e filtros da página
+  `/walks/controle/`, reusando `walks.services.monthly_control`), com
+  botão "Baixar PDF" na página de controle.
+- Layout A4 paisagem: subtotais por cliente, totais gerais, zebra,
+  cabeçalho repetido a cada página e rodapé com carimbo de geração em
+  `America/Sao_Paulo` + paginação; cores do design system (seção 20);
+  português com as fontes internas (Helvetica/WinAnsi — sem fontes
+  embutidas).
+- **Geração síncrona**: o relatório é agregado (as mesmas queries da
+  página — RNF-003) e rápido, então o download responde direto com o
+  PDF; a exigência não bloqueante ("quando a geração puder ser demorada")
+  fica coberta pelo padrão assíncrono das Sprints 11/12 caso um
+  relatório lento surja.
+- PyPDF: validação dos documentos gerados (testes extraem o texto e
+  comparam conteúdo pt-br/fuso horário) e ferramenta de inspeção.
+- Detalhes: [docs/relatorios.md](./relatorios.md).
 
 ---
 
@@ -1444,29 +1515,29 @@ Cada tarefa deve:
 
 ## Sprint 12 — IA
 
-- [ ] Configurar OpenAI.
-- [ ] Configurar LangChain.
-- [ ] Configurar LangGraph.
-- [ ] Configurar GPT-5.5-mini.
-- [ ] Criar abstração inicial de IA.
-- [ ] Definir primeiro caso de uso.
-- [ ] Criar prompt especializado.
-- [ ] Criar workflow LangGraph quando necessário.
-- [ ] Criar task Celery.
-- [ ] Persistir resultado quando necessário.
-- [ ] Criar notificação de conclusão.
-- [ ] Documentar arquitetura de IA.
+- [x] Configurar OpenAI.
+- [x] Configurar LangChain.
+- [x] Configurar LangGraph.
+- [x] Configurar GPT-5.5-mini.
+- [x] Criar abstração inicial de IA.
+- [x] Definir primeiro caso de uso.
+- [x] Criar prompt especializado.
+- [x] Criar workflow LangGraph quando necessário.
+- [x] Criar task Celery.
+- [x] Persistir resultado quando necessário.
+- [x] Criar notificação de conclusão.
+- [x] Documentar arquitetura de IA.
 
 ## Sprint 13 — Relatórios
 
-- [ ] Configurar ReportLab.
-- [ ] Configurar PyPDF.
-- [ ] Criar primeiro relatório.
-- [ ] Criar layout.
-- [ ] Validar português.
-- [ ] Validar timezone.
-- [ ] Implementar geração assíncrona se necessário.
-- [ ] Documentar relatórios.
+- [x] Configurar ReportLab.
+- [x] Configurar PyPDF.
+- [x] Criar primeiro relatório.
+- [x] Criar layout.
+- [x] Validar português.
+- [x] Validar timezone.
+- [x] Implementar geração assíncrona se necessário.
+- [x] Documentar relatórios.
 
 ## Sprint 14 — Dados de demonstração
 
@@ -2059,6 +2130,7 @@ REDIS_URL=redis://redis:6379/0
 CELERY_BROKER_URL=amqp://rabbitmq:5672//
 
 OPENAI_API_KEY=COLOCAR_DE_ACORDO_COM_A_ESTRATEGIA_DE_SECRET_DO_PROJETO
+AI_MODEL=gpt-5.5-mini
 ```
 
 Os nomes definitivos devem corresponder exatamente ao `settings.py` e ao stack.
@@ -2638,7 +2710,7 @@ Os pontos abaixo devem ser decididos antes da implementação definitiva do dom�
 - [ ] Regras de feriados.
 - [ ] Regras de remarcação.
 - [x] Modelo de notificações. — Sprint 11: in-app por usuário (nível/título/mensagem/link/lida); ver seção 9.1 e docs/celery.md.
-- [ ] Casos de uso de IA do MVP.
+- [x] Casos de uso de IA do MVP. — Sprint 12: **resumo operacional mensal** (contadores de RF-011 + observações do mês, por mês e opcionalmente por cliente); ver seção 19 e docs/ia.md.
 - [ ] Política definitiva de armazenamento de media em ambiente multi-node.
 - [ ] Política de retenção de backups.
 - [ ] Política de retenção de logs.

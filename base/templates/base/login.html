@@ -6,7 +6,8 @@
     <meta http-equiv="x-ua-compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Entrar — Sistema de Gestão para Dog Walker Inteligente</title>
-    <link rel="shortcut icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
+    {# Brand assets: bump ?v= on swap (cache busting — see base.html). #}
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}?v=2">
     <!-- Design system assets (design_system/refs/duralux — PRD seção 20) -->
     <link rel="stylesheet" type="text/css" href="{% static 'css/bootstrap.mim.css' %}">
     <link rel="stylesheet" type="text/css" href="{% static 'css/vendors.min.css' %}">
@@ -21,7 +22,7 @@
                         <div class="card-body p-4">
                             <div class="text-center mb-4">
                                 <a href="{% url 'login' %}" class="d-inline-block mb-3">
-                                    <img src="{% static 'images/logo-abbr.png' %}" alt="Sistema de Gestão para Dog Walker Inteligente" class="img-fluid" style="height: 48px;">
+                                    <img src="{% static 'images/logo-abbr.png' %}?v=2" alt="Sistema de Gestão para Dog Walker Inteligente" class="img-fluid" style="height: 48px;">
                                 </a>
                                 <h5 class="m-b-10">Sistema de Gestão para Dog Walker Inteligente</h5>
                                 <p class="fs-12 text-muted mb-0">Entre para acessar o sistema</p>

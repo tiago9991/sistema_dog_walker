@@ -37,6 +37,14 @@
         <i class="feather-filter me-2"></i><span>Filtrar</span>
     </button>
 </form>
+<!-- Relatório do mês em PDF (PRD seção 21 — Sprint 13) -->
+<a href="{% url 'reports:monthly_control_pdf' %}?month={{ current_month }}{% if current_client_id %}&client={{ current_client_id }}{% endif %}{% if current_dog_id %}&dog={{ current_dog_id }}{% endif %}" class="btn btn-sm btn-light-brand" data-bs-toggle="tooltip" title="Baixar o controle do mês em PDF (respeita os filtros)">
+    <i class="feather-download me-2"></i><span>Baixar PDF</span>
+</a>
+<!-- Análise do mês por IA (PRD seção 19 — Sprint 12) -->
+<a href="{% url 'ai:list' %}?month={{ current_month }}{% if current_client_id %}&client={{ current_client_id }}{% endif %}" class="btn btn-sm btn-light-brand" data-bs-toggle="tooltip" title="Analisar o mês com IA (respeita o mês e o cliente)">
+    <i class="feather-cpu me-2"></i><span>Analisar com IA</span>
+</a>
 {% endblock %}
 
 {% block content %}

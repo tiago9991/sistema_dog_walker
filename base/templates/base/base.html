@@ -6,7 +6,8 @@
     <meta http-equiv="x-ua-compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Sistema de Gestão para Dog Walker Inteligente{% endblock %}</title>
-    <link rel="shortcut icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
+    {# Brand assets: bump ?v= on swap (cache busting — the dev server sends no Cache-Control). #}
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}?v=2">
     <!-- Design system assets (design_system/refs/duralux — PRD seção 20) -->
     <link rel="stylesheet" type="text/css" href="{% static 'css/bootstrap.mim.css' %}">
     <link rel="stylesheet" type="text/css" href="{% static 'css/vendors.min.css' %}">
@@ -21,8 +22,8 @@
         <div class="navbar-wrapper">
             <div class="m-header">
                 <a href="{% url 'home' %}" class="b-brand">
-                    <img src="{% static 'images/logo-full.png' %}" alt="Sistema de Gestão para Dog Walker Inteligente" class="logo logo-lg">
-                    <img src="{% static 'images/logo-abbr.png' %}" alt="" class="logo logo-sm">
+                    <img src="{% static 'images/logo-full.png' %}?v=2" alt="Sistema de Gestão para Dog Walker Inteligente" class="logo logo-lg">
+                    <img src="{% static 'images/logo-abbr.png' %}?v=2" alt="" class="logo logo-sm">
                 </a>
             </div>
             <div class="navbar-content">
@@ -53,6 +54,12 @@
                         <a href="{% url 'walks:control' %}" class="nxl-link{% if request.resolver_match.url_name == 'control' %} active{% endif %}">
                             <span class="nxl-micon"><i class="feather-bar-chart-2"></i></span>
                             <span class="nxl-mtext">Controle mensal</span>
+                        </a>
+                    </li>
+                    <li class="nxl-item{% if current_app == 'ai' %} active{% endif %}">
+                        <a href="{% url 'ai:list' %}" class="nxl-link{% if current_app == 'ai' %} active{% endif %}">
+                            <span class="nxl-micon"><i class="feather-cpu"></i></span>
+                            <span class="nxl-mtext">Análises de IA</span>
                         </a>
                     </li>
                     {% endwith %}
