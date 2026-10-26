@@ -1,7 +1,9 @@
 """Scheduling CRUD views, nested under their dog (PRD RF-004).
 
-Every change to a schedule resynchronizes the dog's future ``previsto``
-walks (see ``walks.services``); history is never destroyed.
+Every change to a schedule resynchronizes the dog's ``previsto`` walks
+(see ``walks.services``): the resync window reaches back to the schedule's
+own start, so a schedule registered after its start date still gets its
+past contracted walks. History (walks with an outcome) is never destroyed.
 """
 
 from django.contrib import messages

@@ -256,6 +256,65 @@ class ResyncTests(WalkTestBase):
             Walk.objects.filter(dog=self.dog_a, date__lt=today).exists()
         )
 
+    def test_resync_backfills_from_backdated_schedule_start(self):
+        """A schedule registered after its own start still gets its past
+        contracted walks (decision 2026-10-26 — PRD section 53): without
+        the backfill, dates before the 7-day lookback could never receive
+        an outcome (the Giovana case: day 08/10 unrecordable)."""
+        # Monday, 16 days before TODAY; the default lookback (7) only
+        # reaches 14/10 — 05/10 and 12/10 are outside the regular window.
+        WalkSchedule.objects.create(
+            dog=self.dog_a, start_date=date(2026, 10, 5), monday=True
+        )
+        generate_walks(today=TODAY)
+        self.assertFalse(
+            Walk.objects.filter(
+                dog=self.dog_a, date__lt=date(2026, 10, 12)
+            ).exists()
+        )
+        # Resync (any schedule change) extends the window to the
+        # schedule's own start: both Mondays are created as 'previsto'.
+        resync_dog_walks(self.dog_a, today=TODAY)
+        self.assertEqual(
+            {
+                Walk.objects.get(dog=self.dog_a, date=date(2026, 10, 5)).status,
+                Walk.objects.get(dog=self.dog_a, date=date(2026, 10, 12)).status,
+            },
+            {Walk.STATUS_SCHEDULED},
+        )
+
+    def test_resync_backfill_preserves_resolved_and_is_idempotent(self):
+        WalkSchedule.objects.create(
+            dog=self.dog_a, start_date=date(2026, 10, 5), monday=True
+        )
+        resync_dog_walks(self.dog_a, today=TODAY)
+        past_walk = Walk.objects.get(dog=self.dog_a, date=date(2026, 10, 5))
+        transition_walk(past_walk, Walk.STATUS_COMPLETED)
+
+        # A later schedule change must not touch the resolved past walk
+        # (history is never destroyed)...
+        resync_dog_walks(self.dog_a, today=TODAY)
+        past_walk.refresh_from_db()
+        self.assertEqual(past_walk.status, Walk.STATUS_COMPLETED)
+        # ...and the backfill never duplicates (idempotent — RF-005).
+        self.assertEqual(
+            Walk.objects.filter(dog=self.dog_a, date=date(2026, 10, 5)).count(),
+            1,
+        )
+
+    def test_resync_with_future_start_creates_nothing_before_it(self):
+        WalkSchedule.objects.create(
+            dog=self.dog_a, start_date=date(2026, 11, 5), thursday=True
+        )
+        resync_dog_walks(self.dog_a, today=TODAY)
+        # No walk before the schedule's own start (clamping holds).
+        dates = list(
+            Walk.objects.filter(dog=self.dog_a)
+            .order_by('date')
+            .values_list('date', flat=True)
+        )
+        self.assertEqual(dates[0], date(2026, 11, 5))
+
 
 class WalkViewTests(WalkTestBase):
     """Sprint 8 — day/week/month/history lists + filters (RF-006/RF-012)."""

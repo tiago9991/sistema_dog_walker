@@ -13,7 +13,10 @@ Rules registered in the PRD (section 53, resolved):
 - schedule changes (item 10): resynchronizes the dog's walks — future
   ``previsto`` walks are deleted and regenerated from the dog's active
   schedules; walks with any other status are preserved (history is never
-  destroyed);
+  destroyed). The resync window reaches back to the earliest active
+  schedule's own start (decision 2026-10-26, PRD section 53): a schedule
+  registered after its start date still gets its past contracted walks,
+  which the regular window (item 9) would miss;
 - monthly ``restantes`` (item 7, resolved in Sprint 9):
   ``contratados - realizados - cancelados - não realizados`` (never
   negative). The rule per status (operational balance only — the
@@ -28,7 +31,7 @@ from itertools import groupby
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Min, Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -139,18 +142,34 @@ def generate_walks(
 
 
 def resync_dog_walks(dog, today=None):
-    """Reapply the dog's active schedules to its future ``previsto`` walks.
+    """Reapply the dog's active schedules to its ``previsto`` walks.
 
     Deletes the dog's future ``previsto`` walks and regenerates them from
-    the dog's active schedules. Walks with any other status are preserved
-    (history is never destroyed — PRD RF-007/RF-009).
+    the dog's active schedules. The window's lower bound is extended to
+    the earliest active schedule's start when it is older than the
+    standard lookback (decision 2026-10-26 — PRD section 53): a schedule
+    registered after its own start date must still get its past
+    contracted walks, so they can receive an outcome (RF-007/RF-008) and
+    reach the monthly control/report. Per-schedule clamping in
+    ``generate_walks`` still guarantees no walk older than the schedule
+    itself. Walks with any other status are preserved (history is never
+    destroyed — PRD RF-007/RF-009).
     """
     today = today or timezone.localdate()
+    earliest_start = active_schedules(dog=dog).aggregate(
+        earliest=Min('start_date')
+    )['earliest']
+    lookback = GENERATION_LOOKBACK_DAYS
+    if earliest_start is not None:
+        # Backdated schedules: never less than the default lookback (missed
+        # runs), extended to the schedule's own start (never beyond it —
+        # generate_walks clamps per schedule).
+        lookback = max(GENERATION_LOOKBACK_DAYS, (today - earliest_start).days)
     with transaction.atomic():
         Walk.objects.filter(
             dog=dog, date__gte=today, status=Walk.STATUS_SCHEDULED
         ).delete()
-        return generate_walks(today=today, dog=dog)
+        return generate_walks(today=today, dog=dog, lookback_days=lookback)
 
 
 def transition_walk(walk, to_status, observation=None):
@@ -315,6 +334,32 @@ def monthly_control(month_start, month_end, client=None, dog=None):
         else 0
     )
     return rows, totals
+
+
+def completed_walk_dates_by_dog(month_start, month_end, client=None, dog=None):
+    """Chronological ``realizado`` walk dates of the month, per dog id.
+
+    Companion to ``monthly_control`` (RF-011) used by the monthly control
+    PDF (PRD section 21) to list the days each dog was actually walked —
+    recorded facts (``Walk.date``/``status``), not a derived rule. One
+    aggregate query (``walk_status_date_idx`` backs the status+date
+    filter); scoped like ``monthly_control`` so the report can never
+    show days outside the requested client/dog filter.
+    """
+    queryset = Walk.objects.filter(
+        status=Walk.STATUS_COMPLETED,
+        date__gte=month_start,
+        date__lte=month_end,
+    ).order_by('date')
+    if client is not None:
+        queryset = queryset.filter(dog__client=client)
+    if dog is not None:
+        queryset = queryset.filter(dog=dog)
+
+    dates_by_dog = {}
+    for dog_id, walk_date in queryset.values_list('dog_id', 'date'):
+        dates_by_dog.setdefault(dog_id, []).append(walk_date)
+    return dates_by_dog
 
 
 def group_monthly_control_by_client(rows):

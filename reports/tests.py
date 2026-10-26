@@ -91,17 +91,21 @@ class MonthlyControlPdfTests(ReportTestBase):
         self.assertIn('Controle mensal de passeios', text)
         self.assertIn('Outubro 2026', text)
         self.assertIn('todos os clientes e cachorros', text)
-        # Table headers (pt-br with accents — Helvetica/WinAnsi).
+        # Table headers (pt-br with accents — Helvetica/WinAnsi). The PDF
+        # shows the client-facing subset: scheduled/cancelled/missed are
+        # deliberately omitted (decision 26/10/2026 — they stay on the
+        # control page).
         for header in (
             'Contratados',
-            'Previstos',
             'Realizados',
-            'Cancelados',
-            'Não realizados',
             'Restantes',
             'Realização',
+            'Dias realizados',
         ):
             self.assertIn(header, text, msg=header)
+        self.assertNotIn('Previstos', text)
+        self.assertNotIn('Cancelados', text)
+        self.assertNotIn('Não realizados', text)
         # Data: both clients/dogs, per-client subtotals and grand totals.
         self.assertIn('Cliente A', text)
         self.assertIn('Rex', text)
@@ -110,6 +114,23 @@ class MonthlyControlPdfTests(ReportTestBase):
         self.assertIn('Totais de Cliente A', text)
         self.assertIn('Totais de Cliente B', text)
         self.assertIn('Totais do mês', text)
+
+    def test_pdf_lists_completed_walk_days(self):
+        """The days column shows the month's day numbers of each dog's
+        completed walks (PRD section 21 — decision: completed days only,
+        as the last column)."""
+        self.seed_month()
+        # Rex: completed on 05/10 (seed) + 26/10 (below) → "5, 26".
+        Walk.objects.create(
+            dog=self.dog_a, date=date(2026, 10, 26), status=Walk.STATUS_COMPLETED
+        )
+        text = pdf_text(build_monthly_control_pdf(MONTH_START, MONTH_END))
+        self.assertIn('5, 26', text)
+        # Days are scoped like the counters: no Rex days outside his scope.
+        scoped = pdf_text(
+            build_monthly_control_pdf(MONTH_START, MONTH_END, dog=self.dog_b)
+        )
+        self.assertNotIn('5, 26', scoped)
 
     def test_pdf_footer_has_timezone_and_page_number(self):
         self.seed_month()
@@ -140,9 +161,10 @@ class MonthlyControlPdfTests(ReportTestBase):
     def test_pdf_without_data_renders_message(self):
         content = build_monthly_control_pdf(MONTH_START, MONTH_END)
         self.assertTrue(content.startswith(b'%PDF'))
-        text = pdf_text(content)
-        # The message Paragraph wraps inside the column — assert the
-        # unwrapped portion.
+        # The message Paragraph wraps inside the column — normalize line
+        # breaks before asserting multi-word strings (wrapping depends on
+        # the column widths).
+        text = pdf_text(content).replace('\n', ' ')
         self.assertIn('Nenhum passeio', text)
         self.assertIn('no período', text)
 

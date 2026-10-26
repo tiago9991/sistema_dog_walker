@@ -301,7 +301,14 @@ Deve evitar duplicação de passeios.
 - Alterações de programação (criar/editar/ativar/desativar) fazem o
   **resync** do cachorro: apagam os futuros `previsto` e os regeneram pelas
   programações ativas; passeios com qualquer outro status nunca são apagados
-  (histórico preservado).
+  (histórico preservado). No resync, a janela alcança o início da
+  **programação ativa mais antiga** do cachorro (decisão 26/10/2026 —
+  seção 53): uma programação cadastrada depois do próprio início ainda gera
+  os passeios passados contratados (que o retrospecto padrão de 7 dias não
+  alcançaria) como `previsto`, para que possam receber desfecho
+  (RF-007/RF-008) e entrar no controle mensal/relatório; o limite por
+  programação continua garantindo que nenhum passeio seja criado anterior
+  ao início dela.
 - Timezone: datas operacionais obtidas com `timezone.localdate()`
   (`America/Sao_Paulo`); o passeio armazena `date` (sem horário).
 - Execução: management command `generate_walks` (idempotente, com
@@ -1207,6 +1214,19 @@ Os relatórios devem ser gerados de maneira não bloqueante quando a geração p
   relatório lento surja.
 - PyPDF: validação dos documentos gerados (testes extraem o texto e
   comparam conteúdo pt-br/fuso horário) e ferramenta de inspeção.
+- **Coluna "Dias realizados"** (decisão aprovada em 26/10/2026, após a
+  Sprint 13): o PDF lista, por cachorro, os dias do mês em que o passeio
+  foi realizado (números de dia; sem realizados → `—`) — fatos
+  registrados (`Walk.date`/`status=realizado`) via
+  `walks.services.completed_walk_dates_by_dog` (uma query agregada,
+  índice `(status, date)`), sem N+1; contadores RF-011 inalterados.
+- **PDF sem as colunas "Previstos", "Cancelados" e "Não
+  realizados"** (decisão aprovada em 26/10/2026, após a Sprint 13): o
+  PDF é o relatório compartilhado com o cliente final — apresenta
+  apenas contratados/realizados/restantes + % de realização + dias
+  realizados. A página `/walks/controle/` mantém os contadores
+  completos; ambos usam o mesmo serviço de dados, portanto não
+  divergem.
 - Detalhes: [docs/relatorios.md](./relatorios.md).
 
 ---
@@ -2706,7 +2726,7 @@ Os pontos abaixo devem ser decididos antes da implementação definitiva do dom�
 - [x] Regra exata para "passeios restantes". — Sprint 9: `contratados − realizados − cancelados − não realizados` (nunca negativo; saldo operacional, sem impacto financeiro); ver RF-011.
 - [x] Modelo definitivo de recorrência.
 - [x] Janela de geração de passeios.
-- [x] Comportamento quando uma programação é alterada.
+- [x] Comportamento quando uma programação é alterada. — 26/10/2026: o resync passou a gerar desde o início da programação ativa mais antiga do cachorro — cadastros retroativos geram seus passeios passados contratados como `previsto` (a janela padrão de 7 dias não os alcançaria) — mantendo o resync dos futuros e a preservação de desfechos; ver RF-005.
 - [ ] Regras de feriados.
 - [ ] Regras de remarcação.
 - [x] Modelo de notificações. — Sprint 11: in-app por usuário (nível/título/mensagem/link/lida); ver seção 9.1 e docs/celery.md.

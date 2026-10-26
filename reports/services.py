@@ -7,11 +7,23 @@ the companion library of the stack (PRD section 7): it validates the
 generated documents (tests assert a parsable PDF with the expected
 content) and is the maintenance tool for inspecting generated files.
 
-Layout (landscape A4 — the table has nine columns):
+Layout (landscape A4 — the table has seven columns):
 
 - header: report title, period (pt-br month name), scope filters;
-- one row per dog with the RF-011 counters + realization percentage,
-  a bold subtotal row per client and a grand total row;
+- one row per dog with the **client-facing subset** of the RF-011
+  counters (contracted/completed/remaining + realization percentage) —
+  ``scheduled``, ``cancelled`` and ``missed`` are deliberately omitted
+  (decision 26/10/2026, PRD section 21: the PDF is the report shared
+  with the client; the full counters stay on ``/walks/controle/``, both
+  fed by the same service, so they never disagree) — plus the
+  **completed days** column: the month's day numbers on which the dog
+  was walked (e.g. ``5, 12, 19, 26``); the period in the header scopes
+  the report to a single month, so day numbers alone are unambiguous;
+  ``—`` when the dog has no completed walk in the month. Dates come
+  from ``walks.services.completed_walk_dates_by_dog`` (recorded facts
+  — one aggregate query per report);
+- a bold subtotal row per client and a grand total row (their days
+  cell stays empty — days are a per-dog detail);
 - zebra stripes on dog rows; subtotal/total rows carry their own
   backgrounds (commands are applied in order — they win over zebra);
 - the table header repeats on page breaks (``repeatRows``);
@@ -41,7 +53,11 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from walks.services import group_monthly_control_by_client, monthly_control
+from walks.services import (
+    completed_walk_dates_by_dog,
+    group_monthly_control_by_client,
+    monthly_control,
+)
 
 # Design system tokens (PRD section 20 — theme.min.css / bootstrap).
 BRAND_COLOR = colors.HexColor('#3654D1')  # .bg-primary
@@ -55,8 +71,13 @@ MARGIN = 12 * mm
 
 REPORT_TITLE = 'Controle mensal de passeios'
 
-# Column widths (landscape A4 usable width ≈ 794 pt).
-COLUMN_WIDTHS = [140, 120, 62, 62, 62, 62, 72, 62, 90]
+# Column widths (landscape A4 usable width ≈ 774 pt — 12 mm margins).
+# Header cells are plain strings (no wrap), so numeric columns keep the
+# measured Helvetica-Bold 8.5 header width + 12 pt of default padding;
+# the wide **days** column (last) wraps as a Paragraph when a dog has
+# many completed days — it absorbed the width freed by the removed
+# "Previstos" column.
+COLUMN_WIDTHS = [120, 100, 63, 60, 60, 58, 310]
 
 
 def _scope_label(client=None, dog=None):
@@ -120,19 +141,22 @@ def _footer(canvas, document):
     canvas.restoreState()
 
 
-def _counter_row(styles, label, dog_name, counters, bold=False):
-    """One data row: client/dog labels as Paragraphs (wrap), numbers."""
+def _counter_row(styles, label, dog_name, counters, days='', bold=False):
+    """One data row: client/dog labels and days as Paragraphs (wrap), numbers.
+
+    Only the client-facing counters (decision 26/10/2026 — PRD section
+    21): scheduled/cancelled/missed stay on the monthly control page,
+    not on the PDF shared with the client.
+    """
     cell = styles['cell_bold'] if bold else styles['cell']
     return [
         Paragraph(label, cell),
         Paragraph(dog_name, cell),
         counters['contracted'],
-        counters['scheduled'],
         counters['completed'],
-        counters['cancelled'],
-        counters['missed'],
         counters['remaining'],
         f"{counters['progress']}%",
+        Paragraph(days, cell) if days else '',
     ]
 
 
@@ -142,6 +166,9 @@ def build_monthly_control_pdf(month_start, month_end, client=None, dog=None):
         month_start, month_end, client=client, dog=dog
     )
     client_groups = group_monthly_control_by_client(rows)
+    completed_dates = completed_walk_dates_by_dog(
+        month_start, month_end, client=client, dog=dog
+    )
 
     styles = _styles()
 
@@ -160,12 +187,10 @@ def build_monthly_control_pdf(month_start, month_end, client=None, dog=None):
             'Cliente',
             'Cachorro',
             'Contratados',
-            'Previstos',
             'Realizados',
-            'Cancelados',
-            'Não realizados',
             'Restantes',
             'Realização',
+            'Dias realizados',
         ]
     ]
     style_commands = [
@@ -176,7 +201,9 @@ def build_monthly_control_pdf(month_start, month_end, client=None, dog=None):
         ('LEADING', (0, 0), (-1, -1), 11),
         ('GRID', (0, 0), (-1, -1), 0.4, GRID_COLOR),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
+        # Numbers stay centered; the days column (last) is a left-aligned
+        # Paragraph (the period in the header scopes it to one month).
+        ('ALIGN', (2, 1), (-2, -1), 'CENTER'),
         ('TOPPADDING', (0, 0), (-1, -1), 4),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ]
@@ -188,7 +215,7 @@ def build_monthly_control_pdf(month_start, month_end, client=None, dog=None):
                     'Nenhum passeio ou programação no período.',
                     styles['cell'],
                 ),
-                '', '', '', '', '', '', '', '',
+                '', '', '', '', '', '',
             ]
         )
     else:
@@ -202,7 +229,13 @@ def build_monthly_control_pdf(month_start, month_end, client=None, dog=None):
                 dog_label = row['dog'].name + (
                     '' if row['dog'].is_active else ' (desativado)'
                 )
-                data.append(_counter_row(styles, client_label, dog_label, row))
+                dates = completed_dates.get(row['dog'].pk, [])
+                days = ', '.join(str(day.day) for day in dates) or '—'
+                data.append(
+                    _counter_row(
+                        styles, client_label, dog_label, row, days=days
+                    )
+                )
             data.append(
                 _counter_row(
                     styles,

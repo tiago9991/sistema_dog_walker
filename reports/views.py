@@ -1,7 +1,8 @@
 """Report views: PDF downloads (PRD section 21 — Sprint 13).
 
 The monthly control report is generated **synchronously**: the data is
-aggregate-based (the same two queries as the page — RNF-003) and renders
+aggregate-based (the page's aggregate queries + the completed-days
+query — RNF-003) and renders
 in milliseconds, so the download responds directly with the PDF. PRD
 section 21 requires the non-blocking path only "quando a geração puder
 ser demorada"; if a slow report ever appears, the Celery pattern from

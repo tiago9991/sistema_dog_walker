@@ -311,8 +311,13 @@ class ResyncServiceTests(ScheduleTestBase):
         past_walk.refresh_from_db()
         self.assertEqual(future_walk.status, Walk.STATUS_COMPLETED)
         self.assertEqual(past_walk.status, Walk.STATUS_CANCELLED)
-        # 'previsto' walks were deleted and regenerated — same total.
-        self.assertEqual(Walk.objects.filter(dog=self.dog_a).count(), total)
+        # 'previsto' walks were deleted and regenerated — plus the backfill:
+        # the schedule starts 10 days back, so the resync window now reaches
+        # its own start and creates the 3 days the default lookback (7) had
+        # missed (decision 2026-10-26 — PRD section 53).
+        self.assertEqual(
+            Walk.objects.filter(dog=self.dog_a).count(), total + 3
+        )
         # Today was regenerated as 'previsto'.
         self.assertEqual(
             Walk.objects.get(dog=self.dog_a, date=today).status,
