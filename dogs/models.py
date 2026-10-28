@@ -1,5 +1,6 @@
 """Dog domain models (PRD sections 8.3, 9.1 and RF-003)."""
 
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from base.models import BaseModel
@@ -27,6 +28,21 @@ class Dog(BaseModel):
     name = models.CharField('nome', max_length=150)
     breed = models.CharField('raça', max_length=100, blank=True)
     notes = models.TextField('observações', blank=True)
+    # Monthly package by quantity (decision 2026-10-26 — PRD RF-011):
+    # quantity contracts (e.g. 15 walks/month, flexible days) cannot be
+    # expressed by weekday recurrence — 3 fixed days/week yields 13-15+
+    # dates depending on the month. Empty = contract derived from the
+    # dog's active schedules (current behavior).
+    monthly_walks_quota = models.PositiveSmallIntegerField(
+        'passeios contratados por mês',
+        null=True,
+        blank=True,
+        validators=(MinValueValidator(1),),
+        help_text=(
+            'Pacote mensal por quantidade (ex.: 15/mês, dias flexíveis). '
+            'Vazio = contratados derivados das programações.'
+        ),
+    )
     # Soft deactivation: history must be preserved (PRD RF-003).
     is_active = models.BooleanField('ativo', default=True)
     deactivated_at = models.DateTimeField('desativado em', null=True, blank=True)

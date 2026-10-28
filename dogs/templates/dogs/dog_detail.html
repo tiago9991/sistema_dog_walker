@@ -68,6 +68,10 @@
                     <div class="fw-semibold text-dark">{{ dog.breed|default:'—' }}</div>
                 </div>
                 <div class="mb-3">
+                    <div class="fs-12 text-muted mb-1">Passeios contratados por mês</div>
+                    <div class="fw-semibold text-dark">{% if dog.monthly_walks_quota %}{{ dog.monthly_walks_quota }}{% else %}<span class="text-muted">derivado das programações</span>{% endif %}</div>
+                </div>
+                <div class="mb-3">
                     <div class="fs-12 text-muted mb-1">Observações</div>
                     <div class="fw-semibold text-dark">{{ dog.notes|default:'—' }}</div>
                 </div>

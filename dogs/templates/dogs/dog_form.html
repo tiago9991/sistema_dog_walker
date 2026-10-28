@@ -44,6 +44,12 @@
                             {{ form.breed }}
                             {% for error in form.breed.errors %}<div class="fs-11 text-danger mt-1">{{ error }}</div>{% endfor %}
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="{{ form.monthly_walks_quota.id_for_label }}">Passeios contratados por mês</label>
+                            {{ form.monthly_walks_quota }}
+                            <div class="fs-11 text-muted mt-1">Pacote mensal por quantidade (ex.: 15). Vazio = derivado das programações.</div>
+                            {% for error in form.monthly_walks_quota.errors %}<div class="fs-11 text-danger mt-1">{{ error }}</div>{% endfor %}
+                        </div>
                         <div class="col-md-12">
                             <label class="form-label" for="{{ form.notes.id_for_label }}">Observações</label>
                             {{ form.notes }}

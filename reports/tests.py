@@ -132,6 +132,21 @@ class MonthlyControlPdfTests(ReportTestBase):
         )
         self.assertNotIn('5, 26', scoped)
 
+    def test_pdf_shows_monthly_package_as_contracted(self):
+        """Client-facing ``contratados`` reflects the dog's monthly
+        package (``Dog.monthly_walks_quota`` — decision 26/10/2026, PRD
+        RF-011): the report shared with the client must show the hired
+        quantity, never the weekday-calendar derivation."""
+        # No schedule, no walks: the quota alone contracts the month.
+        self.dog_a.monthly_walks_quota = 15
+        self.dog_a.save()
+        text = pdf_text(
+            build_monthly_control_pdf(MONTH_START, MONTH_END, dog=self.dog_a)
+        )
+        self.assertIn('Rex', text)
+        # 15 = contratados/restantes of the package (nothing done yet).
+        self.assertIn('15', text)
+
     def test_pdf_footer_has_timezone_and_page_number(self):
         self.seed_month()
         text = pdf_text(build_monthly_control_pdf(MONTH_START, MONTH_END))

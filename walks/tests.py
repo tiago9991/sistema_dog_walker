@@ -650,6 +650,65 @@ class MonthlyControlServiceTests(WalkTestBase):
         self.assertIn(self.dog_a.pk, rows)
         self.assertNotIn(self.dog_b.pk, rows)  # no schedule, no walks
 
+    def test_quota_replaces_calendar_derivation(self):
+        """Monthly package by quantity (decision 26/10/2026 — PRD
+        RF-011): the quota is the month's contract. The weekday calendar
+        would report 13 (Mon/Wed/Fri in October), misleading the
+        client-facing counters for quantity packages (15/month)."""
+        self.dog_a.monthly_walks_quota = 15
+        self.dog_a.save()
+
+        rows, totals = self._rows(*self.OCTOBER)
+        row = rows[self.dog_a.pk]
+        self.assertEqual(row['contracted'], 15)  # quota, not 13
+        self.assertEqual(row['scheduled'], self.DOG_A_WALKS_OCTOBER)
+        self.assertEqual(row['remaining'], 15)  # no outcomes yet
+        self.assertEqual(row['progress'], 0)
+        self.assertEqual(totals['contracted'], 15)
+
+    def test_quota_dog_without_schedule_is_listed(self):
+        # Pure package client: no schedule, walks added by hand — the
+        # quota alone contracts the month and lists the dog.
+        self.dog_b.monthly_walks_quota = 15
+        self.dog_b.save()
+
+        rows, _ = self._rows(*self.OCTOBER)
+        row = rows[self.dog_b.pk]
+        self.assertEqual(row['contracted'], 15)
+        self.assertEqual(row['scheduled'], 0)
+        self.assertEqual(row['remaining'], 15)
+
+    def test_quota_consumes_counters_and_clamps_remaining(self):
+        # 3 completed of a 2-walk package (extra walks to reach the
+        # client's quantity): over-delivery clamps remaining at 0 and
+        # progress reports above 100% — delivered beyond the package.
+        self.dog_a.monthly_walks_quota = 2
+        self.dog_a.save()
+        for walk_date in (date(2026, 10, 14), date(2026, 10, 16), date(2026, 10, 19)):
+            transition_walk(
+                Walk.objects.get(dog=self.dog_a, date=walk_date),
+                Walk.STATUS_COMPLETED,
+            )
+
+        rows, _ = self._rows(*self.OCTOBER)
+        row = rows[self.dog_a.pk]
+        self.assertEqual(row['completed'], 3)
+        self.assertEqual(row['remaining'], 0)  # never negative
+        self.assertEqual(row['progress'], 150)  # round(100*3/2)
+
+    def test_quota_ignored_for_inactive_dog(self):
+        # Same rule as the schedule-derived contract: inactive dogs keep
+        # their history (walks) but have no contract.
+        self.dog_a.monthly_walks_quota = 15
+        self.dog_a.is_active = False
+        self.dog_a.save()
+
+        rows, _ = self._rows(*self.OCTOBER)
+        row = rows[self.dog_a.pk]
+        self.assertEqual(row['contracted'], 0)
+        self.assertEqual(row['scheduled'], self.DOG_A_WALKS_OCTOBER)
+        self.assertEqual(row['remaining'], 0)
+
     def test_client_and_dog_filters(self):
         WalkSchedule.objects.create(
             dog=self.dog_b, start_date=date(2026, 10, 1), tuesday=True

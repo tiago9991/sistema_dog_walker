@@ -10,10 +10,16 @@ class DogForm(forms.ModelForm):
 
     class Meta:
         model = Dog
-        fields = ('name', 'breed', 'notes')
+        fields = ('name', 'breed', 'monthly_walks_quota', 'notes')
         widgets = {
             'name': forms.TextInput(attrs={'placeholder': 'Nome do cachorro'}),
             'breed': forms.TextInput(attrs={'placeholder': 'Raça do cachorro'}),
+            'monthly_walks_quota': forms.NumberInput(
+                attrs={
+                    'min': 1,
+                    'placeholder': 'Ex.: 15 (vazio = derivar das programações)',
+                }
+            ),
             'notes': forms.Textarea(
                 attrs={'rows': 3, 'placeholder': 'Observações gerais sobre o cachorro'}
             ),

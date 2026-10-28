@@ -460,7 +460,7 @@ mês corrente, timezone `America/Sao_Paulo`):
 
 | Contador | Regra |
 |---|---|
-| `contratados` | datas do mês cobertas por programações **ativas** do cachorro (dia da semana dentro do período) — determinístico a partir de RF-004, independente da janela de geração (meses futuros também possuem contrato) |
+| `contratados` | `Dog.monthly_walks_quota` quando preenchida (pacote mensal por quantidade, ex.: 15/mês com dias flexíveis — decisão 26/10/2026) **é** o contrato do mês, substituindo a derivação por calendário; sem quota: datas do mês cobertas por programações **ativas** do cachorro (dia da semana dentro do período) — determinístico a partir de RF-004, independente da janela de geração (meses futuros também possuem contrato) |
 | `previstos` | passeios existentes no mês com status `previsto` |
 | `realizados` | passeios existentes no mês com status `realizado` |
 | `cancelados` | passeios existentes no mês com status `cancelado` |
@@ -479,6 +479,22 @@ cancelamento permanece decisão aberta na seção 53):
 - quando o contrato vigente encolhe (ex.: programação desativada após
   execuções), `restantes` é limitado a zero — os desfechos registrados
   permanecem visíveis nas contagens de status.
+
+Pacote mensal por quantidade (decisão 26/10/2026 — motivação: contratos
+do tipo "15 passeios/mês" com dias flexíveis não podem ser expressos por
+recorrência de dias da semana; 3 dias fixos/semana geram 13–15+ datas
+conforme o mês, e o relatório compartilhado com o cliente mostrava um
+contratados que o cliente não reconhece):
+
+- a quota substitui **integralmente** a derivação por calendário no mês
+  (a programação segue gerando os passeios regulares; passeios avulsos
+  adicionados para fechar a quantidade contam como `realizados`);
+- entrega além do pacote: `restantes` limitado a zero e progresso acima
+  de 100% (entregou além do contratado);
+- v1 — quota é um valor fixo por cachorro: para meses parciais
+  (programação/início no meio do mês, desativações) deixar vazio ou
+  ajustar o valor; mudança de contrato atualiza o campo (relatórios
+  antigos regenerados refletem o valor atual).
 
 Visões: `/walks/controle/` agrupada por cliente com subtotais e uma linha
 por cachorro (visão por cliente e por cachorro), filtros por
@@ -717,13 +733,14 @@ Relacionamento:
 
 Um cliente pode possuir vários cachorros.
 
-Campos de negócio definitivos (definidos na Sprint 5 — decisão 2 da seção 53 resolvida):
+Campos de negócio definitivos (definidos na Sprint 5 — decisão 2 da seção 53 resolvida; `monthly_walks_quota` adicionada por decisão de 26/10/2026 — RF-011):
 
 | Campo | Tipo | Observação |
 |---|---|---|
 | `name` | `CharField(150)` | obrigatório |
 | `breed` | `CharField(100)` | opcional |
 | `notes` | `TextField` | opcional |
+| `monthly_walks_quota` | `PositiveSmallIntegerField` | opcional (≥1); pacote mensal por quantidade — vazio = contratados derivados das programações |
 | `is_active` | `BooleanField` | desativação soft; histórico preservado |
 | `deactivated_at` | `DateTimeField` | preenchido na desativação |
 
@@ -2723,7 +2740,7 @@ Os pontos abaixo devem ser decididos antes da implementação definitiva do dom�
 - [x] Estados definitivos de `Walk`.
 - [ ] Regras de cancelamento.
 - [ ] Regras financeiras de cancelamento.
-- [x] Regra exata para "passeios restantes". — Sprint 9: `contratados − realizados − cancelados − não realizados` (nunca negativo; saldo operacional, sem impacto financeiro); ver RF-011.
+- [x] Regra exata para "passeios restantes". — Sprint 9: `contratados − realizados − cancelados − não realizados` (nunca negativo; saldo operacional, sem impacto financeiro); ver RF-011. — 26/10/2026: `contratados` passou a refletir o **pacote mensal por quantidade** (`Dog.monthly_walks_quota`) quando preenchido, substituindo a derivação por calendário; ver RF-011.
 - [x] Modelo definitivo de recorrência.
 - [x] Janela de geração de passeios.
 - [x] Comportamento quando uma programação é alterada. — 26/10/2026: o resync passou a gerar desde o início da programação ativa mais antiga do cachorro — cadastros retroativos geram seus passeios passados contratados como `previsto` (a janela padrão de 7 dias não os alcançaria) — mantendo o resync dos futuros e a preservação de desfechos; ver RF-005.

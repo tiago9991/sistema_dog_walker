@@ -23,7 +23,11 @@ Rules registered in the PRD (section 53, resolved):
   financial impact of cancellations remains an open decision):
   ``realizado``/``não realizado``/``cancelado`` consume the month's
   contract; ``previsto`` stays pending; contracted dates without a
-  generated walk (beyond the generation window) remain in the balance.
+  generated walk (beyond the generation window) remain in the balance;
+- contracted by monthly package (decision 2026-10-26 — PRD RF-011):
+  ``Dog.monthly_walks_quota`` (e.g. 15 walks/month, flexible days) is
+  the month's contract, replacing the weekday-calendar derivation —
+  quantity packages cannot be expressed by recurrence alone.
 """
 
 from datetime import date, timedelta
@@ -237,14 +241,41 @@ def shift_month(year, month, delta):
 def contracted_walks_by_dog(month_start, month_end, client=None, dog=None):
     """Contracted walks per dog id for the month (PRD RF-011).
 
-    Deterministic from the dog's active schedules (RF-004): a date of the
-    month is contracted when an active schedule (of an operationally
-    active dog/client) selects its weekday within the schedule period.
-    Independent from the generation window, so it also covers months whose
-    walks have not been generated yet.
+    Two sources, in priority order (decision 2026-10-26 — PRD RF-011):
+
+    1. the dog's ``monthly_walks_quota`` (monthly package by quantity,
+       e.g. 15 walks with flexible days): the quota **is** the month's
+       contract. Quantity packages cannot be expressed by weekday
+       recurrence — 3 fixed days/week yields 13-15+ dates depending on
+       the month, which misleads the client-facing control/report;
+    2. otherwise, deterministic from the dog's active schedules (RF-004):
+       a date of the month is contracted when an active schedule (of an
+       operationally active dog/client) selects its weekday within the
+       schedule period. Independent from the generation window, so it
+       also covers months whose walks have not been generated yet.
+
+    v1 limitation (registered in the PRD): the quota is a fixed per-dog
+    value — for partial months (schedule starting/ending mid-month,
+    deactivations) leave it empty or adjust it; the calendar derivation
+    applies otherwise. Inactive dogs/clients never have a contract.
     """
-    counts = {}
+    quota_counts = {}
+    dogs_queryset = Dog.objects.filter(
+        monthly_walks_quota__isnull=False,
+        is_active=True,
+        client__is_active=True,
+    )
+    if client is not None:
+        dogs_queryset = dogs_queryset.filter(client=client)
+    if dog is not None:
+        dogs_queryset = dogs_queryset.filter(pk=dog.pk)
+    for dog_id, quota in dogs_queryset.values_list('pk', 'monthly_walks_quota'):
+        quota_counts[dog_id] = quota
+
+    counts = dict(quota_counts)
     for schedule in active_schedules(client=client, dog=dog):
+        if schedule.dog_id in quota_counts:
+            continue  # the quota replaced the calendar derivation
         current = max(schedule.start_date, month_start)
         stop = month_end if schedule.end_date is None else min(
             schedule.end_date, month_end
@@ -262,9 +293,11 @@ def monthly_control(month_start, month_end, client=None, dog=None):
     """Monthly control rows per dog (PRD RF-011) + overall totals.
 
     One row per dog that either has walks in the month or has contracted
-    dates in the month. ``remaining`` follows the Sprint 9 rule registered
-    in the PRD (see the module docstring). Two aggregate queries (schedules
-    + walks by status) plus one dog query — no per-row queries (RNF-003).
+    dates in the month (schedule-derived or via ``monthly_walks_quota``).
+    ``remaining`` follows the Sprint 9 rule registered in the PRD (see
+    the module docstring). Aggregate queries only (schedules, quota dogs
+    and walks by status) plus one dog query — no per-row queries
+    (RNF-003).
     """
     contracted = contracted_walks_by_dog(
         month_start, month_end, client=client, dog=dog

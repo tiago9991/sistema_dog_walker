@@ -21,7 +21,10 @@ tela. A **apresentação** é o subconjunto para o cliente (decisão
 26/10/2026, PRD seção 21): contratados/realizados/restantes
 + % de realização + dias realizados; as colunas **previstos**,
 **cancelados** e **não realizados** ficam apenas na página (o PDF é o
-relatório que se compartilha com o cliente). Filtros idênticos ao da página:
+relatório que se compartilha com o cliente). Contratados reflete o
+**pacote mensal** do cachorro quando cadastrado
+(`Dog.monthly_walks_quota` — decisão 26/10/2026, RF-011); sem pacote,
+deriva das programações. Filtros idênticos ao da página:
 `?month=YYYY-MM` (padrão: mês corrente), `?client=` e `?dog=`.
 
 Ponto de entrada: botão **"Baixar PDF"** no cabeçalho do controle

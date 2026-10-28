@@ -65,6 +65,49 @@ class DogCRUDTests(DogTestBase):
         self.assertContains(response, 'Rex')
         self.assertContains(response, 'Pastor Alemão')
 
+    def test_create_with_monthly_walks_quota(self):
+        """Monthly package by quantity (decision 26/10/2026 — PRD
+        RF-011): optional field; empty falls back to the
+        schedule-derived contract."""
+        self.login(self.operator)
+        response = self.client.post(
+            reverse('dogs:create', kwargs={'client_pk': self.client_a.pk}),
+            {'name': 'Thor', 'breed': '', 'monthly_walks_quota': 15, 'notes': ''},
+        )
+        dog = Dog.objects.get(name='Thor')
+        self.assertEqual(dog.monthly_walks_quota, 15)
+
+        detail = self.client.get(
+            reverse('dogs:detail', kwargs={'client_pk': self.client_a.pk, 'pk': dog.pk})
+        )
+        self.assertContains(detail, 'Passeios contratados por mês')
+        self.assertContains(detail, '15')
+
+    def test_quota_zero_is_rejected(self):
+        # 0 is meaningless as a package (empty = derived) — ≥1 only.
+        self.login(self.operator)
+        response = self.client.post(
+            reverse('dogs:create', kwargs={'client_pk': self.client_a.pk}),
+            {'name': 'Thor', 'breed': '', 'monthly_walks_quota': 0, 'notes': ''},
+        )
+        self.assertEqual(response.status_code, 200)  # re-renders with errors
+        self.assertFalse(Dog.objects.filter(name='Thor').exists())
+
+    def test_edit_clears_quota_back_to_derived(self):
+        self.dog_a.monthly_walks_quota = 15
+        self.dog_a.save()
+        self.login(self.operator)
+        response = self.client.post(
+            reverse('dogs:update', kwargs={'client_pk': self.client_a.pk, 'pk': self.dog_a.pk}),
+            {'name': 'Rex', 'breed': '', 'monthly_walks_quota': '', 'notes': ''},
+        )
+        self.assertRedirects(
+            response,
+            reverse('dogs:detail', kwargs={'client_pk': self.client_a.pk, 'pk': self.dog_a.pk}),
+        )
+        self.dog_a.refresh_from_db()
+        self.assertIsNone(self.dog_a.monthly_walks_quota)
+
     def test_client_can_own_multiple_dogs(self):
         Dog.objects.create(client=self.client_a, name='Bidu')
         Dog.objects.create(client=self.client_a, name='Thor')
